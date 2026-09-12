@@ -108,6 +108,7 @@ namespace SwAgent.Agent
             CancellationToken cancellationToken = default(CancellationToken))
         {
             var result = new AgentRunResult();
+            int pushbacks = 0;
             _conversation.AddUserText(userMessage);
 
             var tools = AnthropicToolAdapter.ToSdkTools(_registry);
@@ -185,7 +186,32 @@ namespace SwAgent.Agent
 
                     if (pendingToolUses.Count == 0)
                     {
-                        // No tools requested: the model is done talking.
+                        // The model thinks it is finished. If it committed to an
+                        // intent and never checked the part against it, it does
+                        // not get to stop here.
+                        //
+                        // This is what stops the contract being a ritual. An
+                        // instruction in the system prompt is advice; refusing
+                        // to accept the answer is enforcement, and only the
+                        // second one survives a model that is keen to wrap up.
+                        if (pushbacks < MaxIntentPushbacks)
+                        {
+                            string demand = await IntentGateAsync(cancellationToken).ConfigureAwait(false);
+                            if (demand != null)
+                            {
+                                pushbacks++;
+                                _log.Info($"Intent gate held the run back (attempt {pushbacks}).");
+                                progress?.Report(new AgentEvent
+                                {
+                                    Type = AgentEvent.Kind.Retry,
+                                    Message = "Checking the part against what was promised...",
+                                });
+
+                                _conversation.AddUserText(demand);
+                                continue;
+                            }
+                        }
+
                         result.Completed = true;
                         result.FinalText = turnText;
                         progress?.Report(new AgentEvent { Type = AgentEvent.Kind.Done, Message = turnText });
@@ -258,6 +284,51 @@ namespace SwAgent.Agent
                 result.StoppedBecause = $"The agent stopped unexpectedly: {ex.Message}";
                 progress?.Report(new AgentEvent { Type = AgentEvent.Kind.Failed, Message = result.StoppedBecause, Ok = false });
                 return Finish(result);
+            }
+        }
+
+        /// <summary>
+        /// How many times the loop will refuse a premature "done". Two is
+        /// enough for the model to check and then fix one problem; beyond that
+        /// it is looping and the user should see the disagreement rather than
+        /// pay for more turns.
+        /// </summary>
+        private const int MaxIntentPushbacks = 2;
+
+        /// <summary>
+        /// Returns the message to send back when the run must not end yet, or
+        /// null when the model is free to finish.
+        /// </summary>
+        private async Task<string> IntentGateAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await _dispatcher.InvokeAsync(() =>
+                {
+                    var intent = _session.Intent;
+
+                    if (!intent.HasIntent) return null;      // nothing was promised
+                    if (intent.IsSatisfied) return null;     // promised and verified
+
+                    if (intent.IsUnverified)
+                    {
+                        return "Before you finish: you declared an intent for this part and never " +
+                               "checked the part against it. Call sw_check_intent now. If it reports " +
+                               "a mismatch, fix the part rather than explaining the mismatch away.";
+                    }
+
+                    // Declared, checked, and it failed.
+                    return "The part does not match the intent you committed to before building, and " +
+                           "you are about to report the work as finished. Either correct the part and " +
+                           "re-check it, or tell the user plainly which commitment was missed and by " +
+                           "how much. Do not describe it as complete.";
+                }, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // A gate that throws must not be able to strand the run.
+                _log.Debug($"Intent gate could not run: {ex.Message}");
+                return null;
             }
         }
 

@@ -39,6 +39,12 @@ namespace SwAgent.Core.Session
         public ISwLog Log => _log;
 
         /// <summary>
+        /// What the agent committed to before building, and whether the part
+        /// honoured it. Lives on the session so every tool can reach it.
+        /// </summary>
+        public Intent.IntentStore Intent { get; } = new Intent.IntentStore();
+
+        /// <summary>
         /// True while a sketch is open for editing.
         ///
         /// InsertSketch toggles: the same call that opens a sketch closes it.

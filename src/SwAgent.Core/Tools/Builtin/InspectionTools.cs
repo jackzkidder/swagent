@@ -147,6 +147,10 @@ namespace SwAgent.Core.Tools.Builtin
 
             registry.RegisterAll(new SwTool[]
             {
+                // Intent - declared first, checked last
+                new DeclareIntentTool(),
+                new CheckIntentTool(),
+
                 // Modelling
                 new NewPartTool(),
                 new SketchOpenTool(),

@@ -47,9 +47,14 @@ namespace SwAgent.Core.Tools.Builtin
 
             session.MarkSketchClosed();
 
+            // A new part is a new commitment: the previous contract described a
+            // different object and must not carry over.
+            session.Intent.Clear();
+
             return ToolResult.Success(
                 $"New part created from the default template. Title: {doc.GetTitle()}. " +
-                "No features yet.");
+                "No features yet. Declare what you intend to build with sw_declare_intent before " +
+                "adding features.");
         }
     }
 
