@@ -23,6 +23,7 @@ namespace SwAgent.Agent
         private long _inputTokens;
         private long _outputTokens;
         private long _cacheReadTokens;
+        private long _cacheWriteTokens;
         private int _requests;
 
         public CostMeter(ModelPricing pricing)
@@ -35,13 +36,15 @@ namespace SwAgent.Agent
         public long InputTokens => Interlocked.Read(ref _inputTokens);
         public long OutputTokens => Interlocked.Read(ref _outputTokens);
         public long CacheReadTokens => Interlocked.Read(ref _cacheReadTokens);
+        public long CacheWriteTokens => Interlocked.Read(ref _cacheWriteTokens);
         public int Requests => _requests;
 
-        public void Record(long inputTokens, long outputTokens, long cacheReadTokens = 0)
+        public void Record(long inputTokens, long outputTokens, long cacheReadTokens = 0, long cacheWriteTokens = 0)
         {
             Interlocked.Add(ref _inputTokens, inputTokens);
             Interlocked.Add(ref _outputTokens, outputTokens);
             Interlocked.Add(ref _cacheReadTokens, cacheReadTokens);
+            Interlocked.Add(ref _cacheWriteTokens, cacheWriteTokens);
             Interlocked.Increment(ref _requests);
         }
 
@@ -53,7 +56,14 @@ namespace SwAgent.Agent
                 decimal input = InputTokens / 1_000_000m * Pricing.InputPerMillionUsd;
                 decimal output = OutputTokens / 1_000_000m * Pricing.OutputPerMillionUsd;
                 decimal cached = CacheReadTokens / 1_000_000m * Pricing.CacheReadPerMillionUsd;
-                return input + output + cached;
+
+                // Writing to the cache costs more than plain input - 1.25x for
+                // the default 5-minute TTL. Counting it at the input rate would
+                // under-report, and an estimate that flatters us is worse than
+                // no estimate.
+                decimal cacheWrite = CacheWriteTokens / 1_000_000m * Pricing.InputPerMillionUsd * 1.25m;
+
+                return input + output + cached + cacheWrite;
             }
         }
 
@@ -69,8 +79,12 @@ namespace SwAgent.Agent
                 ? "under $0.01"
                 : "$" + cost.ToString("0.00", c);
 
+            string cache = CacheReadTokens > 0 || CacheWriteTokens > 0
+                ? $", cache {CacheReadTokens:N0} read / {CacheWriteTokens:N0} written"
+                : ", no cache hits";
+
             return $"{money} estimated this session " +
-                   $"({Requests} request(s), {InputTokens:N0} in / {OutputTokens:N0} out)";
+                   $"({Requests} request(s), {InputTokens:N0} in / {OutputTokens:N0} out{cache})";
         }
 
         public void Reset()
@@ -78,6 +92,7 @@ namespace SwAgent.Agent
             Interlocked.Exchange(ref _inputTokens, 0);
             Interlocked.Exchange(ref _outputTokens, 0);
             Interlocked.Exchange(ref _cacheReadTokens, 0);
+            Interlocked.Exchange(ref _cacheWriteTokens, 0);
             _requests = 0;
         }
     }

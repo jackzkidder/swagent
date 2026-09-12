@@ -96,6 +96,13 @@ namespace SwAgent.Agent
 
             ImagesPruned = imageBearing.Count - keepImagesAt.Count;
 
+            // The last tool-result entry gets the conversation cache breakpoint.
+            int lastToolResultIndex = -1;
+            for (int i = _entries.Count - 1; i >= 0; i--)
+            {
+                if (_entries[i].Kind == EntryKind.ToolResults) { lastToolResultIndex = i; break; }
+            }
+
             var messages = new List<MessageParam>();
 
             for (int i = 0; i < _entries.Count; i++)
@@ -118,10 +125,25 @@ namespace SwAgent.Agent
 
                     case EntryKind.ToolResults:
                         bool keepImages = keepImagesAt.Contains(i);
-                        var blocks = e.ToolResults
-                            .Select(r => (ContentBlockParam)BuildToolResult(r, keepImages))
+                        // Cache the conversation up to the end of the most
+                        // recent tool results. Each turn resends the whole
+                        // history, so without this the agent pays full input
+                        // rate for every previous feature on every new one -
+                        // which is why a long part gets disproportionately
+                        // expensive rather than linearly so.
+                        bool cacheHere = i == lastToolResultIndex;
+
+                        var results = e.ToolResults
+                            .Select((r, idx) => BuildToolResult(
+                                r, keepImages,
+                                cacheBreakpoint: cacheHere && idx == e.ToolResults.Count - 1))
                             .ToList();
-                        messages.Add(new MessageParam { Role = Role.User, Content = blocks });
+
+                        messages.Add(new MessageParam
+                        {
+                            Role = Role.User,
+                            Content = results.Select(r => (ContentBlockParam)r).ToList(),
+                        });
                         break;
                 }
             }
@@ -129,7 +151,7 @@ namespace SwAgent.Agent
             return messages;
         }
 
-        private static ToolResultBlockParam BuildToolResult(ToolResultEntry r, bool keepImage)
+        private static ToolResultBlockParam BuildToolResult(ToolResultEntry r, bool keepImage, bool cacheBreakpoint = false)
         {
             // Text first, image second - deliberately. Numbers are ground truth;
             // the picture is the sanity check, and putting it first invites the
@@ -140,6 +162,7 @@ namespace SwAgent.Agent
                 {
                     ToolUseID = r.ToolUseId,
                     IsError = r.IsError,
+                    CacheControl = cacheBreakpoint ? new CacheControlEphemeral() : null,
                     Content = new List<Block>
                     {
                         new TextBlockParam { Text = r.Text },
@@ -168,6 +191,7 @@ namespace SwAgent.Agent
             {
                 ToolUseID = r.ToolUseId,
                 IsError = r.IsError,
+                CacheControl = cacheBreakpoint ? new CacheControlEphemeral() : null,
                 Content = text,
             };
         }

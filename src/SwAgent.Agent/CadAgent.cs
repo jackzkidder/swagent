@@ -319,7 +319,30 @@ namespace SwAgent.Agent
                     {
                         Model = Model,
                         MaxTokens = MaxTokens,
-                        System = SystemPrompt.Text,
+
+                        // Cache the stable prefix. Requests render as
+                        // tools -> system -> messages, so a breakpoint on the
+                        // system block covers the tool schemas as well - and
+                        // those are identical on every single turn of a run.
+                        //
+                        // This is the difference between paying full input rate
+                        // for ~3K tokens of schema on every tool call and paying
+                        // a tenth of it. Over a twenty-feature part that is most
+                        // of the bill.
+                        //
+                        // Both halves are byte-stable by construction: the
+                        // system prompt is a constant, and the tool list is
+                        // ordered by name. Neither may gain a timestamp or a
+                        // per-request id without silently killing the cache.
+                        System = new List<TextBlockParam>
+                        {
+                            new TextBlockParam
+                            {
+                                Text = SystemPrompt.Text,
+                                CacheControl = new CacheControlEphemeral(),
+                            },
+                        },
+
                         Tools = tools,
                         Messages = _conversation.BuildMessages(),
                     };
@@ -431,7 +454,8 @@ namespace SwAgent.Agent
                 Cost.Record(
                     usage.InputTokens,
                     usage.OutputTokens,
-                    usage.CacheReadInputTokens ?? 0);
+                    usage.CacheReadInputTokens ?? 0,
+                    usage.CacheCreationInputTokens ?? 0);
             }
             catch (Exception ex)
             {
