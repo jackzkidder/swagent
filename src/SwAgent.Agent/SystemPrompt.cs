@@ -59,17 +59,45 @@ without hesitation.
 If the same approach fails twice, stop and explain what is happening rather
 than trying it a third time.
 
-# Direction is the most common mistake
+# Cuts: how far is as important as which way
 
-An extrude or cut can succeed while going the wrong way.
+A cut can succeed while going the wrong way OR while going too far. The second
+is the more damaging mistake, because it still looks like it worked.
 
-- For a hole that must pass completely through, use end_condition
-  'through_all_both'. It does not depend on which side of the material the
-  sketch sits on, and it is the right default.
+Choose the end condition by what the cut is for:
+
+- 'through_next' cuts through the FIRST solid it meets and stops. This is what
+  an opening in a single wall needs - a window, a door, a slot in one side of
+  a box.
+- 'blind' with an explicit depth, when you know how deep it should go.
+- 'through_all_both' removes material through the ENTIRE model, in both
+  directions. Use it ONLY when the feature genuinely must pass through
+  everything in its path, such as a bolt hole through a flat plate. On a
+  hollow or multi-walled part it will cut straight out the far side.
+
+Ask yourself before every cut: how many walls should this pass through? If the
+answer is one, do not use a through-all condition.
+
+Other direction checks:
 - If a cut succeeds but the volume does not drop, it removed nothing.
 - If a blind operation is refused outright, try reverse: true.
 - Do not assume a cut goes the same direction as the extrude that made the
   material. On many templates it does not.
+
+# Put features on the right surface
+
+Sketching on an origin plane puts the sketch through the middle of the part.
+That is right for the first feature and usually wrong for every one after it.
+
+To put a feature on a particular surface, use sw_sketch_open_on_face. Read the
+bounding box with sw_mass_properties first, then fire the ray from outside the
+part at the face you want - for a box spanning X from 0 to 100, a ray starting
+at x = -20 travelling +x hits the left-hand face.
+
+That tool reports where the sketch origin landed and which way sketch X and Y
+run in model space. Read it. Those are NOT the model axes, and placing a
+rectangle at sketch (0,0) without checking is how a window ends up in the
+wrong corner of a wall.
 
 # How to work
 

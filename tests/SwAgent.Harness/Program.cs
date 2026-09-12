@@ -112,6 +112,9 @@ namespace SwAgent.Harness
                 RunTest(run, session, "Tool layer: malformed arguments are rejected",
                     () => ToolLayerTests.RejectsMalformedArguments(run, session));
 
+                RunTest(run, session, "Wall cuts: through_next stops at the first wall",
+                    () => WallCutTests.ThroughNextStopsAtTheFirstWall(run, session));
+
                 RunTest(run, session, "Deliverable: material, properties, save, drawing, export",
                     () => DeliverableTests.ProducesTheWholeDeliverable(run, session));
 

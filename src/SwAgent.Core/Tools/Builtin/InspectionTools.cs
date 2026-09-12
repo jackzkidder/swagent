@@ -150,6 +150,7 @@ namespace SwAgent.Core.Tools.Builtin
                 // Modelling
                 new NewPartTool(),
                 new SketchOpenTool(),
+                new SketchOnFaceTool(),
                 new SketchCloseTool(),
                 new SketchRectTool(),
                 new SketchCircleTool(),

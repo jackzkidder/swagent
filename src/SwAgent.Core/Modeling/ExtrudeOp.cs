@@ -25,11 +25,25 @@ namespace SwAgent.Core.Modeling
         ThroughAll = 1,
 
         /// <summary>
-        /// Pass through the entire body in BOTH directions. The right default
-        /// for a through hole: it does not depend on which side of the material
-        /// the sketch plane happens to sit on.
+        /// Pass through the entire body in BOTH directions.
+        ///
+        /// Direction-proof, which makes it tempting as a default - but it
+        /// removes material through the WHOLE model. A window sketched on the
+        /// front of a house cuts the back wall out too. Use it only when the
+        /// feature genuinely must pass through everything in its path.
         /// </summary>
         ThroughAllBoth = 9,
+
+        /// <summary>
+        /// Pass through the NEXT solid encountered, then stop.
+        ///
+        /// This is what an opening in a single wall needs, and its absence is
+        /// why a house came out with its windows cut clean through both sides.
+        /// </summary>
+        ThroughNext = 2,
+
+        /// <summary>Stop at the next face, without passing through it.</summary>
+        UpToNext = 11,
 
         /// <summary>Extrude symmetrically about the sketch plane, total depth as given.</summary>
         MidPlane = 6
@@ -187,6 +201,8 @@ namespace SwAgent.Core.Modeling
                 case EndCondition.ThroughAll: return swEndConditions_e.swEndCondThroughAll;
                 case EndCondition.ThroughAllBoth: return swEndConditions_e.swEndCondThroughAllBoth;
                 case EndCondition.MidPlane: return swEndConditions_e.swEndCondMidPlane;
+                case EndCondition.ThroughNext: return swEndConditions_e.swEndCondThroughNext;
+                case EndCondition.UpToNext: return swEndConditions_e.swEndCondUpToNext;
                 default: throw new ArgumentOutOfRangeException(nameof(end));
             }
         }

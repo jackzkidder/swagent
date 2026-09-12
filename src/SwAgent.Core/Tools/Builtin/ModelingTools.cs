@@ -89,6 +89,54 @@ namespace SwAgent.Core.Tools.Builtin
         }
     }
 
+    /// <summary>
+    /// Open a sketch directly on a face of the existing solid.
+    ///
+    /// This is what makes anything beyond a single block possible. Sketching
+    /// only on the three origin planes means every feature starts from the
+    /// middle of the part and runs outward - which is how an opening in one
+    /// wall of a house became an opening through both.
+    /// </summary>
+    public sealed class SketchOnFaceTool : SwTool
+    {
+        public override string Name => "sw_sketch_open_on_face";
+        public override string Description =>
+            "Open a sketch on a FACE of the existing solid, found by firing a ray at the model. " +
+            "Use this to put a feature on a specific surface - a window in one wall, a hole on the top " +
+            "face. Start the ray outside the part and aim it at the face you want: check the bounding box " +
+            "with sw_mass_properties first. The result tells you where the sketch origin landed and which " +
+            "way its axes run, which you need before placing anything.";
+
+        public override IReadOnlyList<ToolParameter> Parameters => new[]
+        {
+            ToolParameter.Number("from_x_mm", "X of the ray's starting point, mm. Put it outside the part.",
+                Limits.MinMm, Limits.MaxMm),
+            ToolParameter.Number("from_y_mm", "Y of the ray's starting point, mm.", Limits.MinMm, Limits.MaxMm),
+            ToolParameter.Number("from_z_mm", "Z of the ray's starting point, mm.", Limits.MinMm, Limits.MaxMm),
+            ToolParameter.Choice("direction",
+                "Which way the ray travels from that point. It selects the first face it hits.",
+                new[] { "+x", "-x", "+y", "-y", "+z", "-z" }),
+        };
+
+        protected override ToolResult Run(ToolArgs args, SwSession session)
+        {
+            double x = args.GetDouble("from_x_mm");
+            double y = args.GetDouble("from_y_mm");
+            double z = args.GetDouble("from_z_mm");
+            var direction = FaceSelector.ParseDirection(args.GetString("direction"));
+
+            var hit = FaceSelector.SelectByRay(session, x, y, z, direction);
+            if (!hit.Found)
+                return ToolResult.Failure(hit.Description, "face_not_found");
+
+            string frame = FaceSelector.OpenSketchOnSelectedFace(session);
+
+            // Both halves matter: which face was hit, and where its sketch
+            // coordinates are. Either alone leaves geometry placed by guesswork.
+            return ToolResult.Success(hit.Description + " " + frame);
+        }
+    }
+
     /// <summary>Close the open sketch.</summary>
     public sealed class SketchCloseTool : SwTool
     {
@@ -200,10 +248,12 @@ namespace SwAgent.Core.Tools.Builtin
                 "Name of the closed sketch to use, as returned by sw_sketch_close (e.g. 'Sketch1')."),
             ToolParameter.Choice("end_condition",
                 IsCut
-                    ? "How far to cut. Use 'through_all_both' for a hole that must pass completely through, " +
-                      "regardless of which side of the material the sketch sits on - this is the safe default."
+                    ? "How far to cut. 'through_next' cuts through the FIRST solid it meets and stops - use it " +
+                      "for a window or opening in one wall. 'through_all_both' cuts through the ENTIRE model in " +
+                      "both directions - only for a hole that genuinely must pass through everything. 'blind' " +
+                      "uses depth_mm."
                     : "How far to extrude. 'blind' uses depth_mm.",
-                new[] { "blind", "through_all", "through_all_both", "mid_plane" },
+                new[] { "blind", "through_next", "through_all", "through_all_both", "mid_plane", "up_to_next" },
                 required: false,
                 defaultValue: IsCut ? "through_all_both" : "blind"),
             ToolParameter.Number("depth_mm",
@@ -263,6 +313,8 @@ namespace SwAgent.Core.Tools.Builtin
                 case "blind": return EndCondition.Blind;
                 case "through_all": return EndCondition.ThroughAll;
                 case "through_all_both": return EndCondition.ThroughAllBoth;
+                case "through_next": return EndCondition.ThroughNext;
+                case "up_to_next": return EndCondition.UpToNext;
                 case "mid_plane": return EndCondition.MidPlane;
                 default: throw new ArgumentException($"Unknown end condition '{value}'.");
             }
@@ -275,6 +327,8 @@ namespace SwAgent.Core.Tools.Builtin
                 case EndCondition.Blind: return "blind";
                 case EndCondition.ThroughAll: return "through all";
                 case EndCondition.ThroughAllBoth: return "through all, both directions";
+                case EndCondition.ThroughNext: return "through next solid only";
+                case EndCondition.UpToNext: return "up to next face";
                 case EndCondition.MidPlane: return "mid plane";
                 default: return end.ToString();
             }
