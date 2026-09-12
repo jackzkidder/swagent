@@ -162,7 +162,21 @@ namespace SwAgent.Core.Tools.Builtin
                 // Inspection
                 new FeatureTreeTool(),
                 new MassPropertiesTool(),
-                new ScreenshotTool()
+                new ScreenshotTool(),
+
+                // Properties and materials
+                new PropertyReadTool(),
+                new PropertyWriteTool(),
+                new MaterialSetTool(),
+
+                // Files
+                new SaveAsTool(),
+                new ExportTool(),
+
+                // Drawings
+                new DrawingCreateTool(),
+                new DrawingDimensionsTool(),
+                new TitleBlockTool()
             });
 
             return registry;

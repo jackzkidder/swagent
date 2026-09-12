@@ -112,6 +112,9 @@ namespace SwAgent.Harness
                 RunTest(run, session, "Tool layer: malformed arguments are rejected",
                     () => ToolLayerTests.RejectsMalformedArguments(run, session));
 
+                RunTest(run, session, "Deliverable: material, properties, save, drawing, export",
+                    () => DeliverableTests.ProducesTheWholeDeliverable(run, session));
+
                 // These need neither SOLIDWORKS nor an API key.
                 RunTest(run, session, "Agent: API key is stored encrypted",
                     () => AgentTests.ApiKeyIsStoredEncrypted(run));

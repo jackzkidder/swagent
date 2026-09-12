@@ -8,10 +8,10 @@ Bring your own Anthropic API key. It is stored encrypted on your machine with
 DPAPI and is sent only to `api.anthropic.com`. There is no backend, and no model
 geometry, file name or property value leaves the machine.
 
-**Status: loads in SOLIDWORKS, not yet conversational.** The COM layer, the
-add-in shell and the full tool surface work and are verified against a real
-seat - the add-in registers, loads, and shows its task pane. The agent loop and
-API key handling are not built yet, so it cannot yet be talked to. See
+**Status: works end to end.** Install it, paste an Anthropic key into the task
+pane, describe a part, and get the modelled part, a drawing, a STEP and a PDF.
+Verified against a real SOLIDWORKS 2025 seat. Not yet packaged - there is no
+installer, so setup is still a script. See
 [Where this actually is](#where-this-actually-is).
 
 ---
@@ -64,7 +64,7 @@ SwAgent.Harness.exe --cutprobe     # cut end conditions and direction
 SwAgent.Harness.exe --attach-only  # fail rather than start a second session
 ```
 
-Current state: **40 assertions passing** against SOLIDWORKS 2025 SP5.
+Current state: **98 assertions passing** against SOLIDWORKS 2025 SP5.
 
 > **SOLIDWORKS locks the add-in DLL while it has it loaded**, so close it before
 > rebuilding `SwAgent.AddIn`. Core and the harness build fine while it runs -
@@ -127,16 +127,17 @@ Built and verified against a real seat:
 - [x] Headless harness + 2 reference parts + malformed-argument boundary tests
 - [x] `ISwAddIn` shell, COM registration, WebView2 task pane, `UiThreadDispatcher`
 - [x] Tool registry with typed, range-validated parameters and JSON schema
-- [x] 13 tools: new part, sketching, extrude, cut, rebuild, undo, inspection
+- [x] 21 tools: modelling, inspection, properties, materials, files, drawings
 - [x] Verification round-trip: rebuild state + measurements + tree + screenshot
+- [x] DPAPI key storage, Anthropic transport, agent loop, prompt caching
+- [x] Chat UI in the task pane, with first-run key setup
+- [x] Deliverable half: material, properties, save, drawing, STEP/PDF export
 
 Not built yet, in dependency order:
 
-- [ ] API key storage (DPAPI) and the first-run wizard
-- [ ] Anthropic transport and the agent loop
-- [ ] Chat UI in the task pane
-- [ ] Drawings, properties, exports, batch
-- [ ] Installer
+- [ ] Batch operations (folder index, dry-run preview, confirmed apply)
+- [ ] More geometry: fillets, chamfers, patterns, mirrors, hole wizard
+- [ ] Installer (WiX or Inno), code signing
 
 **Known deviation from the spec:** the interops in `refs/` are SOLIDWORKS 2025
 (33.5). The stated policy is to compile against the oldest supported version so
