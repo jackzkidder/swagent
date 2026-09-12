@@ -1,0 +1,85 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+    GENERATED FILE - do not edit by hand.
+    Produced by installer/generate-files.ps1 from the Release build output.
+    Regenerate after adding or removing a dependency.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Fragment>
+    <ComponentGroup Id="AddInFiles" Directory="INSTALLFOLDER">
+      <Component Id="file_Anthropic_dll">
+        <File Id="file_Anthropic_dll_f" Source="$(BinDir)\Anthropic.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_Microsoft_Bcl_AsyncInterfaces_dll">
+        <File Id="file_Microsoft_Bcl_AsyncInterfaces_dll_f" Source="$(BinDir)\Microsoft.Bcl.AsyncInterfaces.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_Microsoft_Extensions_AI_Abstractions_dll">
+        <File Id="file_Microsoft_Extensions_AI_Abstractions_dll_f" Source="$(BinDir)\Microsoft.Extensions.AI.Abstractions.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_Microsoft_Web_WebView2_Core_dll">
+        <File Id="file_Microsoft_Web_WebView2_Core_dll_f" Source="$(BinDir)\Microsoft.Web.WebView2.Core.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_Microsoft_Web_WebView2_WinForms_dll">
+        <File Id="file_Microsoft_Web_WebView2_WinForms_dll_f" Source="$(BinDir)\Microsoft.Web.WebView2.WinForms.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_Microsoft_Web_WebView2_Wpf_dll">
+        <File Id="file_Microsoft_Web_WebView2_Wpf_dll_f" Source="$(BinDir)\Microsoft.Web.WebView2.Wpf.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_SolidWorks_Interop_sldworks_dll">
+        <File Id="file_SolidWorks_Interop_sldworks_dll_f" Source="$(BinDir)\SolidWorks.Interop.sldworks.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_SolidWorks_Interop_swconst_dll">
+        <File Id="file_SolidWorks_Interop_swconst_dll_f" Source="$(BinDir)\SolidWorks.Interop.swconst.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_SolidWorks_Interop_swpublished_dll">
+        <File Id="file_SolidWorks_Interop_swpublished_dll_f" Source="$(BinDir)\SolidWorks.Interop.swpublished.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_SwAgent_Agent_dll">
+        <File Id="file_SwAgent_Agent_dll_f" Source="$(BinDir)\SwAgent.Agent.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_SwAgent_Core_dll">
+        <File Id="file_SwAgent_Core_dll_f" Source="$(BinDir)\SwAgent.Core.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_System_Buffers_dll">
+        <File Id="file_System_Buffers_dll_f" Source="$(BinDir)\System.Buffers.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_System_Collections_Immutable_dll">
+        <File Id="file_System_Collections_Immutable_dll_f" Source="$(BinDir)\System.Collections.Immutable.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_System_IO_Pipelines_dll">
+        <File Id="file_System_IO_Pipelines_dll_f" Source="$(BinDir)\System.IO.Pipelines.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_System_Memory_dll">
+        <File Id="file_System_Memory_dll_f" Source="$(BinDir)\System.Memory.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_System_Net_ServerSentEvents_dll">
+        <File Id="file_System_Net_ServerSentEvents_dll_f" Source="$(BinDir)\System.Net.ServerSentEvents.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_System_Numerics_Vectors_dll">
+        <File Id="file_System_Numerics_Vectors_dll_f" Source="$(BinDir)\System.Numerics.Vectors.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_System_Runtime_CompilerServices_Unsafe_dll">
+        <File Id="file_System_Runtime_CompilerServices_Unsafe_dll_f" Source="$(BinDir)\System.Runtime.CompilerServices.Unsafe.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_System_Text_Encodings_Web_dll">
+        <File Id="file_System_Text_Encodings_Web_dll_f" Source="$(BinDir)\System.Text.Encodings.Web.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_System_Text_Json_dll">
+        <File Id="file_System_Text_Json_dll_f" Source="$(BinDir)\System.Text.Json.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_System_Threading_Tasks_Extensions_dll">
+        <File Id="file_System_Threading_Tasks_Extensions_dll_f" Source="$(BinDir)\System.Threading.Tasks.Extensions.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="file_WebView2Loader_dll">
+        <File Id="file_WebView2Loader_dll_f" Source="$(BinDir)\WebView2Loader.dll" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="AddInAssets" Directory="ASSETSFOLDER">
+      <Component Id="asset_taskpane_bmp">
+        <File Id="asset_taskpane_bmp_f" Source="$(BinDir)\Assets\taskpane.bmp" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>
+

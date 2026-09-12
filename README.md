@@ -10,8 +10,7 @@ geometry, file name or property value leaves the machine.
 
 **Status: works end to end.** Install it, paste an Anthropic key into the task
 pane, describe a part, and get the modelled part, a drawing, a STEP and a PDF.
-Verified against a real SOLIDWORKS 2025 seat. Not yet packaged - there is no
-installer, so setup is still a script. See
+Verified against a real SOLIDWORKS 2025 seat, and packaged as an MSI. See
 [Where this actually is](#where-this-actually-is).
 
 ---
@@ -75,6 +74,41 @@ Current state: **98 assertions passing** against SOLIDWORKS 2025 SP5.
 > reliably see an existing session. Check for strays with
 > `Get-Process SLDWORKS`.
 
+## Building the installer
+
+```powershell
+powershell -ExecutionPolicy Bypass -File installeruild-installer.ps1
+```
+
+Produces `artifacts\SwAgent-<version>-x64.msi`. Needs the WiX .NET tool:
+
+```
+dotnet tool install --global wix --version 5.*
+dotnet tool run wix extension add --global WixToolset.Util.wixext/5.0.2
+```
+
+> **WiX v5 deliberately, not v7.** v6 and later require accepting the Open
+> Source Maintenance Fee EULA, which carries a payment obligation for
+> commercial use above a revenue threshold. v5 is the last version under the
+> plain open-source licence. Revisit this when the product has revenue - it is
+> a licensing decision, not a technical one.
+
+The installer authors the COM registration **as MSI registry components**
+rather than shelling out to `regasm`. That is what makes uninstall reliable:
+Windows Installer owns every key it wrote, so it removes them on uninstall,
+repairs them if damaged, and rolls them back if install fails halfway. A
+`regasm` custom action is invisible to MSI, and when its uninstall counterpart
+does not run you get an add-in entry pointing at a deleted DLL - which throws
+an error on every SOLIDWORKS launch, forever, for someone who no longer uses
+the product.
+
+It refuses to install if SOLIDWORKS or the WebView2 runtime is missing, and
+asks the user to close SOLIDWORKS first, since the host locks the add-in DLL.
+
+**The MSI is not signed.** Unsigned installers hit SmartScreen warnings that
+cost trial conversions, and signing reputation accrues over time - get an OV
+certificate before the first external tester.
+
 ## The rules this code is built around
 
 These are load-bearing. Breaking one does not produce a compile error; it
@@ -132,12 +166,14 @@ Built and verified against a real seat:
 - [x] DPAPI key storage, Anthropic transport, agent loop, prompt caching
 - [x] Chat UI in the task pane, with first-run key setup
 - [x] Deliverable half: material, properties, save, drawing, STEP/PDF export
+- [x] MSI installer with authored COM registration and clean uninstall
 
 Not built yet, in dependency order:
 
 - [ ] Batch operations (folder index, dry-run preview, confirmed apply)
 - [ ] More geometry: fillets, chamfers, patterns, mirrors, hole wizard
-- [ ] Installer (WiX or Inno), code signing
+- [ ] Code signing (OV certificate)
+- [ ] WebView2 bootstrapping - currently detected and refused, not installed
 
 **Known deviation from the spec:** the interops in `refs/` are SOLIDWORKS 2025
 (33.5). The stated policy is to compile against the oldest supported version so

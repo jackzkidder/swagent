@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    SwAgent installer.
+
+    Two decisions worth explaining, because both differ from the obvious
+    approach.
+
+    1. COM REGISTRATION IS AUTHORED, NOT DELEGATED TO REGASM.
+
+       The usual approach is a custom action that shells out to
+       regasm /codebase. This does not do that. regasm's writes are invisible
+       to MSI, so uninstall depends on a second custom action running
+       successfully and in the right order - and when it does not, the user is
+       left with an add-in entry pointing at a deleted DLL, which throws an
+       error on EVERY SOLIDWORKS launch, forever, for someone who no longer
+       even uses the product.
+
+       Authoring the same keys as MSI components means Windows Installer owns
+       them: it writes them on install, removes them on uninstall, repairs them
+       if they are damaged, and rolls them back if installation fails halfway.
+       The keys below are exactly what regasm /codebase produces for a .NET COM
+       server, plus the two SOLIDWORKS-specific locations.
+
+    2. THE ADD-IN IS REGISTERED FOR ALL USERS, THE STARTUP FLAG PER USER.
+
+       SOLIDWORKS reads the add-in list from HKLM and the "load at startup"
+       preference from HKCU. A per-machine install can only write the HKCU half
+       for the installing user; other users on the same machine will find
+       SwAgent in their add-ins list, unticked, which is the correct and
+       expected behaviour rather than a bug.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <?define AddInGuid = "7DADCD66-C0C5-4ABB-A17D-5FDCDA0860A2" ?>
+  <?define AddInProgId = "SwAgent.SwAddIn" ?>
+  <?define AddInClass = "SwAgent.AddIn.SwAddIn" ?>
+  <?define AddInAssembly = "SwAgent.AddIn, Version=$(Version).0, Culture=neutral, PublicKeyToken=null" ?>
+
+  <Package Name="SwAgent"
+           Manufacturer="JK Labs"
+           Version="$(Version)"
+           UpgradeCode="B3A6F1D2-59C4-4E0A-9C77-2E5D1A8B4F31"
+           Scope="perMachine"
+           Compressed="yes">
+
+    <SummaryInformation Description="SwAgent - AI CAD assistant for SOLIDWORKS" />
+
+    <!-- Replace an older build cleanly rather than stacking installs. -->
+    <MajorUpgrade
+      AllowSameVersionUpgrades="yes"
+      DowngradeErrorMessage="A newer version of SwAgent is already installed. Uninstall it first if you want to go back to this one." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- ============ Prerequisites ============ -->
+
+    <!--
+      SOLIDWORKS must be present. Without this the installer succeeds, writes
+      an add-in registration nothing will ever read, and the user is left
+      wondering why nothing happened.
+    -->
+    <Property Id="SOLIDWORKSPRESENT">
+      <RegistrySearch Id="SearchSolidWorks"
+                      Root="HKLM"
+                      Key="SOFTWARE\SolidWorks"
+                      Type="raw"
+                      Bitness="always64" />
+    </Property>
+
+    <!--
+      WebView2 Evergreen Runtime. Present on essentially every current Windows
+      install, absent on some older or stripped images. Without it the task
+      pane is a blank white rectangle - the add-in shows a readable fallback,
+      but it is better to say so before installing than after.
+
+      Checked in three places because the runtime registers itself differently
+      depending on whether it was installed per-machine or per-user.
+    -->
+    <Property Id="WEBVIEW2MACHINE">
+      <RegistrySearch Id="SearchWebView2Wow"
+                      Root="HKLM"
+                      Key="SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+                      Name="pv"
+                      Type="raw"
+                      Bitness="always32" />
+    </Property>
+
+    <Property Id="WEBVIEW2MACHINE64">
+      <RegistrySearch Id="SearchWebView2Machine"
+                      Root="HKLM"
+                      Key="SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+                      Name="pv"
+                      Type="raw"
+                      Bitness="always64" />
+    </Property>
+
+    <Property Id="WEBVIEW2USER">
+      <RegistrySearch Id="SearchWebView2User"
+                      Root="HKCU"
+                      Key="SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+                      Name="pv"
+                      Type="raw" />
+    </Property>
+
+    <Launch Condition="Installed OR SOLIDWORKSPRESENT"
+            Message="SOLIDWORKS was not found on this computer. SwAgent is a SOLIDWORKS add-in and needs SOLIDWORKS 2025 or newer. Install SOLIDWORKS first, then run this installer again." />
+
+    <Launch Condition="Installed OR WEBVIEW2MACHINE OR WEBVIEW2MACHINE64 OR WEBVIEW2USER"
+            Message="The Microsoft Edge WebView2 Runtime is required and was not found. It is a free Microsoft component that SwAgent uses to draw its panel. Install the Evergreen Runtime from https://developer.microsoft.com/microsoft-edge/webview2/ and then run this installer again." />
+
+    <!--
+      SOLIDWORKS holds our DLL open while it is loaded, so installing or
+      removing over a running session leaves files behind and requires a
+      reboot. Ask the user to close it instead.
+    -->
+    <util:CloseApplication Id="CloseSolidWorks"
+                           Target="SLDWORKS.exe"
+                           CloseMessage="no"
+                           RebootPrompt="no"
+                           PromptToContinue="yes"
+                           Description="Please close SOLIDWORKS before continuing. SwAgent cannot be installed or removed while SOLIDWORKS is running." />
+
+    <!-- ============ Files ============ -->
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="SwAgent">
+        <Directory Id="ASSETSFOLDER" Name="Assets" />
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="SwAgent" Level="1">
+      <ComponentRef Id="AddInComServer" />
+      <ComponentGroupRef Id="AddInFiles" />
+      <ComponentGroupRef Id="AddInAssets" />
+      <ComponentRef Id="SolidWorksStartupFlag" />
+    </Feature>
+
+    <!-- ============ The COM server and its registration ============ -->
+
+    <Component Id="AddInComServer" Directory="INSTALLFOLDER" Bitness="always64">
+      <File Id="SwAgentAddInDll" Source="$(BinDir)\SwAgent.AddIn.dll" KeyPath="yes" />
+
+      <!--
+        What regasm /codebase writes for a managed COM server. mscoree.dll is
+        the CLR shim; it reads Class, Assembly and RuntimeVersion to work out
+        what to actually load, and CodeBase tells it where the assembly lives
+        when it is not in the GAC.
+      -->
+      <RegistryKey Root="HKCR" Key="CLSID\{$(AddInGuid)}">
+        <RegistryValue Type="string" Value="$(AddInClass)" />
+
+        <RegistryKey Key="InprocServer32">
+          <RegistryValue Type="string" Value="mscoree.dll" />
+          <RegistryValue Name="ThreadingModel" Type="string" Value="Both" />
+          <RegistryValue Name="Class" Type="string" Value="$(AddInClass)" />
+          <RegistryValue Name="Assembly" Type="string" Value="$(AddInAssembly)" />
+          <RegistryValue Name="RuntimeVersion" Type="string" Value="v4.0.30319" />
+          <RegistryValue Name="CodeBase" Type="string" Value="file:///[INSTALLFOLDER]SwAgent.AddIn.dll" />
+
+          <!-- regasm also writes a version-stamped subkey. -->
+          <RegistryKey Key="$(Version).0">
+            <RegistryValue Name="Class" Type="string" Value="$(AddInClass)" />
+            <RegistryValue Name="Assembly" Type="string" Value="$(AddInAssembly)" />
+            <RegistryValue Name="RuntimeVersion" Type="string" Value="v4.0.30319" />
+            <RegistryValue Name="CodeBase" Type="string" Value="file:///[INSTALLFOLDER]SwAgent.AddIn.dll" />
+          </RegistryKey>
+        </RegistryKey>
+
+        <RegistryKey Key="ProgId">
+          <RegistryValue Type="string" Value="$(AddInProgId)" />
+        </RegistryKey>
+
+        <!-- Marks the class as managed, which is how regasm tags them. -->
+        <RegistryKey Key="Implemented Categories\{62C8FE65-4EBB-45e7-B440-6E39B2CDBF29}" />
+      </RegistryKey>
+
+      <RegistryKey Root="HKCR" Key="$(AddInProgId)">
+        <RegistryValue Type="string" Value="$(AddInClass)" />
+        <RegistryKey Key="CLSID">
+          <RegistryValue Type="string" Value="{$(AddInGuid)}" />
+        </RegistryKey>
+      </RegistryKey>
+
+      <!--
+        The SOLIDWORKS half. Without this key SOLIDWORKS never looks at the COM
+        registration above, and the add-in simply does not exist as far as it
+        is concerned. The default value is a DWORD: 1 means load by default.
+      -->
+      <RegistryKey Root="HKLM" Key="SOFTWARE\SolidWorks\Addins\{$(AddInGuid)}">
+        <RegistryValue Type="integer" Value="1" />
+        <RegistryValue Name="Title" Type="string" Value="SwAgent" />
+        <RegistryValue Name="Description" Type="string"
+                       Value="Describe a part in plain English and get the deliverable: model, drawing, STEP and PDF." />
+      </RegistryKey>
+    </Component>
+
+    <!--
+      Per-user "load at startup". Separate component because it lives in HKCU
+      and therefore only applies to whoever ran the installer.
+    -->
+    <Component Id="SolidWorksStartupFlag" Directory="INSTALLFOLDER" Guid="A1E4C7B9-3D62-4F58-8B1E-6C9D0F2A5E44">
+      <RegistryKey Root="HKCU" Key="SOFTWARE\SolidWorks\AddInsStartup\{$(AddInGuid)}">
+        <RegistryValue Type="integer" Value="1" KeyPath="yes" />
+      </RegistryKey>
+    </Component>
+
+  </Package>
+</Wix>
