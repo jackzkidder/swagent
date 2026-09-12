@@ -11,13 +11,20 @@
     <Version>0.1.0</Version>
     <RepoRefs>$(MSBuildThisFileDirectory)refs\</RepoRefs>
 
-    <!-- Pin the output path so it does not depend on how the build was invoked.
+    <!-- Keep the output path independent of how the build was invoked.
 
          By default MSBuild inserts $(Platform) into the output path whenever it
          is not AnyCPU, so `dotnet build Foo.csproj` writes to bin\Debug\ while
          `dotnet build SwAgent.sln` writes to bin\x64\Debug\. Two output
          directories, one of them stale, and the registration script silently
-         registers whichever one it happens to point at. -->
-    <OutputPath>$(MSBuildProjectDirectory)\bin\$(Configuration)\</OutputPath>
+         registers whichever one it happens to point at.
+
+         Use the SDK's own switch rather than overriding OutputPath by hand.
+         Directory.Build.props is imported BEFORE the SDK assigns a default
+         Configuration, so an OutputPath written in terms of $(Configuration)
+         here expands with it empty - producing a third output directory
+         (bin\net48\) and a stale binary that looks like a build which silently
+         did nothing. -->
+    <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
   </PropertyGroup>
 </Project>

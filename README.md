@@ -58,7 +58,11 @@ SwAgent.Harness.exe --cutprobe     # cut end conditions and direction
 SwAgent.Harness.exe --attach-only  # fail rather than start a second session
 ```
 
-Current state: **17 assertions passing** against SOLIDWORKS 2025 SP5.
+Current state: **40 assertions passing** against SOLIDWORKS 2025 SP5.
+
+> **SOLIDWORKS locks the add-in DLL while it has it loaded**, so close it before
+> rebuilding `SwAgent.AddIn`. Core and the harness build fine while it runs -
+> which is the point of keeping the COM layer free of UI dependencies.
 
 > Without `--attach-only`, the harness will start its own SOLIDWORKS if it
 > cannot attach to a running one — and `Marshal.GetActiveObject` does not
@@ -115,14 +119,16 @@ Built and verified against a real seat:
 - [x] `FeatureExtrusion3` / `FeatureCut4`, wrapped exactly once
 - [x] Mass, volume, bounding box
 - [x] Headless harness + 2 reference parts + malformed-argument boundary tests
+- [x] `ISwAddIn` shell, COM registration, WebView2 task pane, `UiThreadDispatcher`
+- [x] Tool registry with typed, range-validated parameters and JSON schema
+- [x] 13 tools: new part, sketching, extrude, cut, rebuild, undo, inspection
+- [x] Verification round-trip: rebuild state + measurements + tree + screenshot
 
 Not built yet, in dependency order:
 
-- [ ] `ISwAddIn` shell, registration, task pane, `UiThreadDispatcher`
-- [ ] Tool registry and JSON schema emission
-- [ ] Anthropic transport and the agent loop
-- [ ] Screenshots and the verification round-trip
 - [ ] API key storage (DPAPI) and the first-run wizard
+- [ ] Anthropic transport and the agent loop
+- [ ] Chat UI in the task pane
 - [ ] Drawings, properties, exports, batch
 - [ ] Installer
 

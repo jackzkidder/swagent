@@ -155,8 +155,88 @@ Get-Process SLDWORKS | Select-Object Id, StartTime
 
 ---
 
-## Naming collision
+## 8. regasm cannot load an add-in whose interops are not copied local
 
-`SolidWorks.Interop.sldworks` exports a type called `Measure`, so our
-measurement helper is `PartMeasure`. Worth knowing before naming anything else
-generically — `View`, `Body`, `Feature` and `Sketch` are all taken too.
+The near-universal advice for SOLIDWORKS add-ins is Copy Local = False on the
+interop references, so the add-in binds to whatever SOLIDWORKS itself loaded.
+That advice is right about runtime and silent about registration.
+
+`regasm` has to load the add-in type to find its `[ComRegisterFunction]`, and
+loading the type means resolving `ISwAddin` from `swpublished`. regasm is a
+separate process whose probing path is the .NET Framework directory, and
+**SOLIDWORKS does not install its interops into the GAC** (verified: no entries
+under `C:\Windows\Microsoft.NET\assembly\GAC_MSIL`). So:
+
+```
+RegAsm : error RA0000 : Could not load file or assembly
+'SolidWorks.Interop.swpublished, Version=33.5.0.53, ...'
+```
+
+and **nothing is registered at all** - no CLSID key, no Addins key.
+
+Copying them is safe. They are strong-named COM interop wrappers; on a seat
+running this exact version the CLR reuses the already-loaded identity, and on a
+newer seat our older copy loads alongside theirs while the cast to `ISldWorks`
+still succeeds, because RCW casts resolve through COM `QueryInterface` on a
+stable IID rather than through managed type identity. This is exactly why
+compiling against the oldest supported interop is the standard strategy.
+
+---
+
+## 9. `$(Configuration)` is empty in Directory.Build.props
+
+`Directory.Build.props` is imported **before** the SDK assigns a default
+`Configuration`, so this looks reasonable and is a trap:
+
+```xml
+<OutputPath>$(MSBuildProjectDirectory)in\$(Configuration)\</OutputPath>
+```
+
+It expands with `$(Configuration)` empty, producing `bin
+et48\`. Builds then
+succeed while writing to a directory nothing reads, and the previous binary sits
+in `bin\Debug
+et48\` looking current. A test run then exercises stale code
+and passes, which is the worst possible outcome.
+
+The symptom to watch for: a build that reports success in about a second while
+the output file's timestamp does not move.
+
+Use the SDK's own switch instead, which is what the platform-in-path behaviour
+is actually controlled by:
+
+```xml
+<AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
+```
+
+---
+
+## 10. SOLIDWORKS locks the add-in DLL while it is loaded
+
+Once the add-in is registered and SOLIDWORKS has loaded it, the DLL and
+everything it references are locked:
+
+```
+error MSB3021: Unable to copy ... SwAgent.Core.dll ...
+The file is locked by: "SolidWorks (3740)"
+```
+
+SOLIDWORKS must be closed to rebuild the add-in. The Core library and the
+headless harness build fine while it runs, which is another reason the COM layer
+lives in a project with no UI dependency: the tight development loop does not
+require restarting CAD.
+
+---
+
+## Naming collisions
+
+`SolidWorks.Interop.sldworks` is a large namespace of generically-named types,
+and `using` it shadows parts of `System`. Hit so far:
+
+| Ours | Collides with | Resolution |
+|---|---|---|
+| `Measure` | `SolidWorks.Interop.sldworks.Measure` | renamed to `PartMeasure` |
+| `Environment` | `SolidWorks.Interop.sldworks.Environment` | qualify as `System.Environment` |
+
+`View`, `Body`, `Feature`, `Sketch`, `Annotation` and `Attribute` are all taken
+too. Check before naming anything generically.

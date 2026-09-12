@@ -57,6 +57,20 @@ namespace SwAgent.Core.Infrastructure
                 log?.Error($"{toolName}: session lost: {ex.Message}");
                 return ToolResult.Fatal($"{toolName}: {ex.Message}");
             }
+            catch (InvalidOperationException ex)
+            {
+                // Preconditions we check on purpose: no document open, no sketch
+                // open, wrong document type, SOLIDWORKS refused a feature. Those
+                // messages are already written for the agent and usually name
+                // the tool that fixes the problem, so pass them through intact.
+                //
+                // Letting these fall through to the catch-all would be actively
+                // harmful: "failed unexpectedly" tells the model it has hit a
+                // bug in us and should stop, when what it should actually do is
+                // open a sketch and try again.
+                log?.Debug($"{toolName}: precondition not met: {ex.Message}");
+                return ToolResult.Failure($"{toolName}: {ex.Message}", "precondition_failed");
+            }
             catch (COMException ex)
             {
                 if (IsSessionLost(ex))

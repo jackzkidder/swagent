@@ -71,6 +71,18 @@ namespace SwAgent.Harness
                 RunTest(run, session, "Boundary: malformed arguments are rejected",
                     () => ReferencePartTests.RejectsAbsurdArguments(run, session));
 
+                RunTest(run, session, "Tool layer: registry emits valid schema",
+                    () => ToolLayerTests.RegistryEmitsValidSchema(run, session));
+
+                RunTest(run, session, "Tool layer: builds the plate through tool calls",
+                    () => ToolLayerTests.BuildsPlateThroughTools(run, session));
+
+                RunTest(run, session, "Tool layer: undo removes the feature",
+                    () => ToolLayerTests.UndoRemovesTheFeature(run, session));
+
+                RunTest(run, session, "Tool layer: malformed arguments are rejected",
+                    () => ToolLayerTests.RejectsMalformedArguments(run, session));
+
                 return run.Summarize();
             }
             finally

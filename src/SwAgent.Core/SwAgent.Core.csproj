@@ -10,6 +10,8 @@
 
   <ItemGroup>
     <!-- Reference assemblies for net48 without requiring the Developer Pack. -->
+    <!-- Tool schemas and the Messages API wire format are both JSON. -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
