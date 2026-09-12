@@ -284,3 +284,39 @@ body means fitting a wall in from BOTH sides, so a `t` mm wall needs at least
 `2t` mm of material across every direction. A 5 mm shell needs 10 mm of
 thickness everywhere; a 60 mm shell needs 120 mm, which a 100 mm cube does not
 have.
+
+---
+
+## 13. A pattern whose instances miss the material rebuilds CLEAN
+
+The worst one found so far, because every available signal says it worked.
+
+Pattern four holes along a 100 mm plate in the wrong direction and the copies
+march off the end. SOLIDWORKS:
+
+- creates the pattern feature and returns it,
+- rebuilds **clean** - `GetWhatsWrong` reports nothing,
+- leaves the feature tree looking exactly right: one cut, one `LPattern1`,
+- and produces **1.5 holes instead of 4**.
+
+Measured on a 100 x 60 x 10 plate with one hole 30 mm off centre:
+
+| Direction | Reported | Rebuild | Volume | Holes |
+|---|---|---|---|---|
+| wrong (`+y`) | success | clean | 58.822 cm3 | 1.5 |
+| right (`-y`) | success | clean | 56.858 cm3 | 4 |
+
+The only thing that distinguishes them is the volume. So `sw_linear_pattern`
+measures before and after and reports the change PER ADDED INSTANCE:
+
+```
+The 3 added instance(s) changed the volume by 0.393 cm3, i.e. 0.131 cm3 each.
+Compare that against what 'Cut-Extrude1' itself changed...
+```
+
+0.131 against the 0.785 the original cut removed is a 6x discrepancy the agent
+can act on. The tool cannot make that judgement itself - it does not know what
+the source feature removed - but the agent saw that number one tool call ago.
+
+The same shape as the shell finding: the tool reports what a tool can measure,
+and the judgement belongs one level up.

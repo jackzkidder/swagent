@@ -162,6 +162,8 @@ namespace SwAgent.Core.Tools.Builtin
                 new ExtrudeTool(),
                 new CutTool(),
                 new ShellTool(),
+                new LinearPatternTool(),
+                new MirrorTool(),
                 new FilletTool(),
                 new ChamferTool(),
                 new RebuildTool(),

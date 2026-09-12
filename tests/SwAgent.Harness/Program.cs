@@ -112,6 +112,12 @@ namespace SwAgent.Harness
                 RunTest(run, session, "Tool layer: malformed arguments are rejected",
                     () => ToolLayerTests.RejectsMalformedArguments(run, session));
 
+                RunTest(run, session, "Pattern: four holes as one feature",
+                    () => PatternTests.LinearPatternRepeatsAHole(run, session));
+
+                RunTest(run, session, "Pattern: an unknown feature is reported usefully",
+                    () => PatternTests.UnknownFeatureIsReportedUsefully(run, session));
+
                 RunTest(run, session, "Shell: uniform walls, checked by hand calculation",
                     () => DressUpTests.ShellLeavesUniformWalls(run, session));
 
