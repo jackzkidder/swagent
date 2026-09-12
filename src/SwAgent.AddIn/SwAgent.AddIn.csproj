@@ -25,23 +25,39 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Private=false: SOLIDWORKS loads its own interops from its install
-         directory, and binding against a copy of ours risks a version mismatch
-         inside the host process. -->
+    <!-- Private=TRUE, deliberately, and this is not the usual advice.
+
+         The common guidance is copy-local=false, on the theory that SOLIDWORKS
+         loads its own interops and we should bind to whatever it loaded. That
+         works at runtime and breaks at REGISTRATION: regasm has to load our
+         type to find its ComRegisterFunction, and loading the type means
+         resolving ISwAddin from swpublished. regasm is a separate process whose
+         probing path is the Framework directory, not ours, and the interops are
+         not in the GAC - SOLIDWORKS does not put them there. So regasm fails
+         with "Could not load file or assembly SolidWorks.Interop.swpublished"
+         and registers nothing at all.
+
+         Copying them is safe. They are strong-named COM interop wrappers, so on
+         a seat running this exact version the CLR reuses the already-loaded
+         identity. On a NEWER seat our older copy loads alongside theirs and the
+         cast to ISldWorks still succeeds, because RCW casts resolve through COM
+         QueryInterface on a stable IID rather than through managed type
+         identity. That is precisely why compiling against the oldest supported
+         interop is the correct strategy. -->
     <Reference Include="SolidWorks.Interop.sldworks">
       <HintPath>$(RepoRefs)SolidWorks.Interop.sldworks.dll</HintPath>
       <EmbedInteropTypes>false</EmbedInteropTypes>
-      <Private>false</Private>
+      <Private>true</Private>
     </Reference>
     <Reference Include="SolidWorks.Interop.swconst">
       <HintPath>$(RepoRefs)SolidWorks.Interop.swconst.dll</HintPath>
       <EmbedInteropTypes>false</EmbedInteropTypes>
-      <Private>false</Private>
+      <Private>true</Private>
     </Reference>
     <Reference Include="SolidWorks.Interop.swpublished">
       <HintPath>$(RepoRefs)SolidWorks.Interop.swpublished.dll</HintPath>
       <EmbedInteropTypes>false</EmbedInteropTypes>
-      <Private>false</Private>
+      <Private>true</Private>
     </Reference>
   </ItemGroup>
 

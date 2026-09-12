@@ -34,7 +34,7 @@ $ErrorActionPreference = 'Stop'
 
 $AddInGuid = '7DADCD66-C0C5-4ABB-A17D-5FDCDA0860A2'
 $repoRoot  = Split-Path -Parent $PSScriptRoot
-$assembly  = Join-Path $repoRoot "src\SwAgent.AddIn\bin\x64\$Configuration\net48\SwAgent.AddIn.dll"
+$assembly  = Join-Path $repoRoot "src\SwAgent.AddIn\bin\$Configuration\net48\SwAgent.AddIn.dll"
 
 # --- elevation ------------------------------------------------------------
 $identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -74,12 +74,42 @@ Write-Host "  using $regasm"
 
 # /codebase records the assembly's full path, which is what lets SOLIDWORKS
 # load it from a build output folder rather than the GAC.
-$output = & $regasm $assembly /codebase 2>&1
-$output | ForEach-Object { Write-Host "  $_" }
+#
+# Do NOT use `2>&1` on a native executable here. PowerShell wraps each stderr
+# line in an ErrorRecord, and with $ErrorActionPreference = 'Stop' that makes
+# regasm's harmless "unsigned assembly" WARNING terminate this script before it
+# reaches the verification below - which is how a failed registration once
+# looked like a successful one. Capture the streams to files instead.
+$stdoutFile = [IO.Path]::GetTempFileName()
+$stderrFile = [IO.Path]::GetTempFileName()
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "regasm failed with exit code $LASTEXITCODE"
-    exit 1
+try {
+    $proc = Start-Process -FilePath $regasm `
+                          -ArgumentList @("`"$assembly`"", '/codebase') `
+                          -Wait -NoNewWindow -PassThru `
+                          -RedirectStandardOutput $stdoutFile `
+                          -RedirectStandardError $stderrFile
+
+    Get-Content $stdoutFile -ErrorAction SilentlyContinue |
+        Where-Object { $_.Trim() } | ForEach-Object { Write-Host "  $_" }
+
+    $errLines = @(Get-Content $stderrFile -ErrorAction SilentlyContinue | Where-Object { $_.Trim() })
+
+    foreach ($line in $errLines) {
+        # Distinguish regasm's warnings from its errors: the unsigned-assembly
+        # warning is expected until code signing is in place.
+        if ($line -match 'warning RA\d+') { Write-Host "  $line" -ForegroundColor Yellow }
+        else                              { Write-Host "  $line" -ForegroundColor Red }
+    }
+
+    if ($proc.ExitCode -ne 0) {
+        Write-Host ''
+        Write-Error "regasm failed with exit code $($proc.ExitCode). Nothing was registered."
+        exit 1
+    }
+}
+finally {
+    Remove-Item $stdoutFile, $stderrFile -Force -ErrorAction SilentlyContinue
 }
 
 # --- verify ---------------------------------------------------------------

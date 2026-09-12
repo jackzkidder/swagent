@@ -10,5 +10,14 @@
     <Product>SwAgent</Product>
     <Version>0.1.0</Version>
     <RepoRefs>$(MSBuildThisFileDirectory)refs\</RepoRefs>
+
+    <!-- Pin the output path so it does not depend on how the build was invoked.
+
+         By default MSBuild inserts $(Platform) into the output path whenever it
+         is not AnyCPU, so `dotnet build Foo.csproj` writes to bin\Debug\ while
+         `dotnet build SwAgent.sln` writes to bin\x64\Debug\. Two output
+         directories, one of them stale, and the registration script silently
+         registers whichever one it happens to point at. -->
+    <OutputPath>$(MSBuildProjectDirectory)\bin\$(Configuration)\</OutputPath>
   </PropertyGroup>
 </Project>

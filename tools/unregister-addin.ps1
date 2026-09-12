@@ -25,7 +25,7 @@ $ErrorActionPreference = 'Continue'
 
 $AddInGuid = '7DADCD66-C0C5-4ABB-A17D-5FDCDA0860A2'
 $repoRoot  = Split-Path -Parent $PSScriptRoot
-$assembly  = Join-Path $repoRoot "src\SwAgent.AddIn\bin\x64\$Configuration\net48\SwAgent.AddIn.dll"
+$assembly  = Join-Path $repoRoot "src\SwAgent.AddIn\bin\$Configuration\net48\SwAgent.AddIn.dll"
 
 $identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = New-Object Security.Principal.WindowsPrincipal($identity)
