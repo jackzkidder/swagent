@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>SwAgent.AddIn</AssemblyName>
+    <RootNamespace>SwAgent.AddIn</RootNamespace>
+    <UseWindowsForms>true</UseWindowsForms>
+
+    <!-- This assembly is a COM server. The installer runs regasm /codebase
+         against it; we deliberately do NOT set RegisterForComInterop, because
+         that would require an elevated build. -->
+    <EnableComHosting>false</EnableComHosting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SwAgent.Core\SwAgent.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Private=false: SOLIDWORKS loads its own interops from its install
+         directory, and binding against a copy of ours risks a version mismatch
+         inside the host process. -->
+    <Reference Include="SolidWorks.Interop.sldworks">
+      <HintPath>$(RepoRefs)SolidWorks.Interop.sldworks.dll</HintPath>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SolidWorks.Interop.swconst">
+      <HintPath>$(RepoRefs)SolidWorks.Interop.swconst.dll</HintPath>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SolidWorks.Interop.swpublished">
+      <HintPath>$(RepoRefs)SolidWorks.Interop.swpublished.dll</HintPath>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Put WebView2Loader.dll beside the assembly.
+
+       PackageReference leaves it under runtimes\win-x64\native, and .NET
+       Framework does not probe that folder. More importantly, a native
+       P/Invoke resolves against the host EXECUTABLE's directory - SLDWORKS.exe
+       in Program Files - not ours, so the file has to be somewhere we can load
+       it from by absolute path. See NativeDependencies. -->
+  <Target Name="CopyWebView2Loader" AfterTargets="Build">
+    <ItemGroup>
+      <WebView2Native Include="$(OutDir)runtimes\win-x64\native\WebView2Loader.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(WebView2Native)"
+          DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true"
+          Condition="Exists('%(WebView2Native.FullPath)')" />
+  </Target>
+
+</Project>
