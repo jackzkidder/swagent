@@ -59,11 +59,23 @@
       SOLIDWORKS must be present. Without this the installer succeeds, writes
       an add-in registration nothing will ever read, and the user is left
       wondering why nothing happened.
+
+      Detected via the SldWorks.Application ProgID rather than the
+      HKLM\SOFTWARE\SolidWorks key. Two reasons:
+
+        - That key's DEFAULT VALUE IS EMPTY, and a RegistrySearch with no Name
+          reads the default value. An empty result leaves the property unset,
+          so the condition failed on a machine with SOLIDWORKS installed and
+          working. That is exactly the false negative this check must never
+          produce, and it happened.
+
+        - The ProgID is version-agnostic. Keying off "SOLIDWORKS 2025" would
+          break the installer the day a customer upgrades to 2026.
     -->
     <Property Id="SOLIDWORKSPRESENT">
-      <RegistrySearch Id="SearchSolidWorks"
+      <RegistrySearch Id="SearchSolidWorksProgId"
                       Root="HKLM"
-                      Key="SOFTWARE\SolidWorks"
+                      Key="SOFTWARE\Classes\SldWorks.Application\CLSID"
                       Type="raw"
                       Bitness="always64" />
     </Property>
@@ -103,11 +115,24 @@
                       Type="raw" />
     </Property>
 
-    <Launch Condition="Installed OR SOLIDWORKSPRESENT"
-            Message="SOLIDWORKS was not found on this computer. SwAgent is a SOLIDWORKS add-in and needs SOLIDWORKS 2025 or newer. Install SOLIDWORKS first, then run this installer again." />
+    <!--
+      SKIPPREREQCHECKS is an escape hatch, and it exists because of experience
+      rather than theory: a prerequisite check that produces a false negative
+      is worse than no check at all, since it hard-blocks an install on a
+      machine where the product would have worked perfectly.
 
-    <Launch Condition="Installed OR WEBVIEW2MACHINE OR WEBVIEW2MACHINE64 OR WEBVIEW2USER"
-            Message="The Microsoft Edge WebView2 Runtime is required and was not found. It is a free Microsoft component that SwAgent uses to draw its panel. Install the Evergreen Runtime from https://developer.microsoft.com/microsoft-edge/webview2/ and then run this installer again." />
+      Both conditions below can be bypassed with:
+          msiexec /i SwAgent.msi SKIPPREREQCHECKS=1
+
+      The add-in also gates the SOLIDWORKS version at runtime with a readable
+      message, so bypassing here degrades to a clear failure later rather than
+      to a mystery.
+    -->
+    <Launch Condition="Installed OR SOLIDWORKSPRESENT OR SKIPPREREQCHECKS"
+            Message="SOLIDWORKS was not found on this computer. SwAgent is a SOLIDWORKS add-in and needs SOLIDWORKS 2025 or newer. Install SOLIDWORKS first, then run this installer again. If SOLIDWORKS IS installed and you are seeing this in error, re-run with: msiexec /i SwAgent-0.1.0-x64.msi SKIPPREREQCHECKS=1" />
+
+    <Launch Condition="Installed OR WEBVIEW2MACHINE OR WEBVIEW2MACHINE64 OR WEBVIEW2USER OR SKIPPREREQCHECKS"
+            Message="The Microsoft Edge WebView2 Runtime is required and was not found. It is a free Microsoft component that SwAgent uses to draw its panel. Install the Evergreen Runtime from https://developer.microsoft.com/microsoft-edge/webview2/ and then run this installer again. To install anyway: msiexec /i SwAgent-0.1.0-x64.msi SKIPPREREQCHECKS=1" />
 
     <!--
       SOLIDWORKS holds our DLL open while it is loaded, so installing or
