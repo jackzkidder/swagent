@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SwAgent.Core\SwAgent.Core.csproj" />
+    <ProjectReference Include="..\..\src\SwAgent.Agent\SwAgent.Agent.csproj" />
   </ItemGroup>
 
   <ItemGroup>

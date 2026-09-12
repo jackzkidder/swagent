@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>SwAgent.Agent</AssemblyName>
+    <RootNamespace>SwAgent.Agent</RootNamespace>
+    <!-- No UI and no COM here: this project owns the agent loop and transport
+         only. It talks to SOLIDWORKS exclusively through ISwDispatcher. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+
+    <!-- The official Anthropic .NET SDK. Ships a netstandard2.0 target, so it
+         works on net48 - verified by compiling against it. -->
+    <PackageReference Include="Anthropic" Version="12.47.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SwAgent.Core\SwAgent.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- DPAPI lives here on .NET Framework. -->
+    <Reference Include="System.Security" />
+  </ItemGroup>
+
+</Project>

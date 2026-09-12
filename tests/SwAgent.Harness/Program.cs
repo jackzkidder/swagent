@@ -27,6 +27,21 @@ namespace SwAgent.Harness
         {
             bool attachOnly = Array.IndexOf(args, "--attach-only") >= 0;
 
+            // --save-key runs before anything touches SOLIDWORKS: storing a key
+            // has nothing to do with CAD, and requiring a running session to do
+            // it would be daft.
+            int saveKeyAt = Array.IndexOf(args, "--save-key");
+            if (saveKeyAt >= 0)
+            {
+                if (saveKeyAt + 1 >= args.Length)
+                {
+                    Console.Error.WriteLine("Usage: SwAgent.Harness.exe --save-key sk-ant-...");
+                    return 2;
+                }
+
+                return SaveKey(args[saveKeyAt + 1]);
+            }
+
             Console.WriteLine("SwAgent headless harness");
             Console.WriteLine(new string('-', 68));
 
@@ -49,6 +64,20 @@ namespace SwAgent.Harness
                 var log = new FileSwLog(FileSwLog.DefaultPath, verbose: true);
                 var session = new SwSession(sw, log);
                 var run = new TestRun();
+
+                // --agent "<prompt>" runs the real loop against the real API.
+                int agentAt = Array.IndexOf(args, "--agent");
+                if (agentAt >= 0)
+                {
+                    string prompt = agentAt + 1 < args.Length
+                        ? args[agentAt + 1]
+                        : "Make a 60 x 40 x 10 mm plate with a 10 mm hole in the middle.";
+
+                    int modelAt = Array.IndexOf(args, "--model");
+                    string model = modelAt >= 0 && modelAt + 1 < args.Length ? args[modelAt + 1] : null;
+
+                    return LiveAgentRun.Run(session, prompt, model);
+                }
 
                 if (Array.IndexOf(args, "--cutprobe") >= 0)
                 {
@@ -82,6 +111,22 @@ namespace SwAgent.Harness
 
                 RunTest(run, session, "Tool layer: malformed arguments are rejected",
                     () => ToolLayerTests.RejectsMalformedArguments(run, session));
+
+                // These need neither SOLIDWORKS nor an API key.
+                RunTest(run, session, "Agent: API key is stored encrypted",
+                    () => AgentTests.ApiKeyIsStoredEncrypted(run));
+
+                RunTest(run, session, "Agent: the key never reaches the log",
+                    () => AgentTests.LogNeverContainsTheKey(run));
+
+                RunTest(run, session, "Agent: traffic goes only to api.anthropic.com",
+                    () => AgentTests.TrafficGoesOnlyToAnthropic(run));
+
+                RunTest(run, session, "Agent: old screenshots are pruned from history",
+                    () => AgentTests.OldScreenshotsArePruned(run));
+
+                RunTest(run, session, "Agent: tool schema reaches the API intact",
+                    () => AgentTests.ToolSchemaReachesTheApiIntact(run));
 
                 return run.Summarize();
             }
@@ -137,6 +182,34 @@ namespace SwAgent.Harness
             catch (Exception ex)
             {
                 Console.WriteLine($"      (could not close scratch document: {ex.Message})");
+            }
+        }
+
+        /// <summary>Encrypt and store an API key, then confirm without echoing it.</summary>
+        private static int SaveKey(string key)
+        {
+            try
+            {
+                var store = new SwAgent.Agent.ApiKeyStore(log: new FileSwLog(FileSwLog.DefaultPath));
+
+                if (!SwAgent.Agent.ApiKeyStore.LooksWellFormed(key))
+                {
+                    Console.Error.WriteLine(
+                        "That does not look like an Anthropic API key (they start with 'sk-ant-'). Nothing was saved.");
+                    return 2;
+                }
+
+                store.Save(key);
+
+                // Confirm by reading back the masked form, never the key.
+                Console.WriteLine($"Saved, encrypted for your Windows account: {store.GetMaskedKey()}");
+                Console.WriteLine($"Location: {SwAgent.Agent.ApiKeyStore.DefaultPath}");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Could not save the key: {ex.Message}");
+                return 2;
             }
         }
 
