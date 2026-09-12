@@ -63,7 +63,7 @@ SwAgent.Harness.exe --cutprobe     # cut end conditions and direction
 SwAgent.Harness.exe --attach-only  # fail rather than start a second session
 ```
 
-Current state: **98 assertions passing** against SOLIDWORKS 2025 SP5.
+Current state: **147 assertions passing** against SOLIDWORKS 2025 SP5.
 
 > **SOLIDWORKS locks the add-in DLL while it has it loaded**, so close it before
 > rebuilding `SwAgent.AddIn`. Core and the harness build fine while it runs -
@@ -161,12 +161,16 @@ Built and verified against a real seat:
 - [x] Headless harness + 2 reference parts + malformed-argument boundary tests
 - [x] `ISwAddIn` shell, COM registration, WebView2 task pane, `UiThreadDispatcher`
 - [x] Tool registry with typed, range-validated parameters and JSON schema
-- [x] 21 tools: modelling, inspection, properties, materials, files, drawings
+- [x] 29 tools: modelling, shell, fillet, chamfer, patterns, inspection,
+      properties, materials, files, drawings, design-intent contract
 - [x] Verification round-trip: rebuild state + measurements + tree + screenshot
 - [x] DPAPI key storage, Anthropic transport, agent loop, prompt caching
 - [x] Chat UI in the task pane, with first-run key setup
 - [x] Deliverable half: material, properties, save, drawing, STEP/PDF export
 - [x] MSI installer with authored COM registration and clean uninstall
+- [x] Design-intent contract: the agent predicts before it builds, and the
+      loop refuses a premature "done"
+- [x] The wrong-way transcript - see docs/wrong-way-transcript.md
 
 Not built yet, in dependency order:
 

@@ -79,6 +79,14 @@ namespace SwAgent.Harness
                     return LiveAgentRun.Run(session, prompt, model);
                 }
 
+                // --wrongway plants a deliberately misplaced feature and asks
+                // the agent to find it. Spends API credit.
+                if (Array.IndexOf(args, "--wrongway") >= 0)
+                {
+                    int m = Array.IndexOf(args, "--model");
+                    return WrongWayExperiment.Run(session, m >= 0 && m + 1 < args.Length ? args[m + 1] : null);
+                }
+
                 if (Array.IndexOf(args, "--cutprobe") >= 0)
                 {
                     CutProbe.Run(session);

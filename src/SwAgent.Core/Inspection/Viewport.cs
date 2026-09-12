@@ -40,8 +40,19 @@ namespace SwAgent.Core.Inspection
     /// </summary>
     public static class Viewport
     {
-        /// <summary>Target size of the longest edge, in pixels.</summary>
-        public const int MaxEdgePixels = 1024;
+        /// <summary>
+        /// Target size of the longest edge, in pixels.
+        ///
+        /// 640, not 1024. An image costs roughly (width x height) / 750 tokens,
+        /// so this is about 2.5x cheaper per capture - and the picture is only
+        /// ever a sanity check on direction and gross placement, which does not
+        /// need the pixels. Dimensions are judged from the numbers, which are
+        /// exact and nearly free.
+        ///
+        /// Do not raise this without a measurement showing the extra detail
+        /// changes an outcome.
+        /// </summary>
+        public const int MaxEdgePixels = 640;
 
         /// <summary>
         /// Point the camera at a named view, fit the model, redraw, and return
