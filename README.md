@@ -8,9 +8,11 @@ Bring your own Anthropic API key. It is stored encrypted on your machine with
 DPAPI and is sent only to `api.anthropic.com`. There is no backend, and no model
 geometry, file name or property value leaves the machine.
 
-**Status: foundation. Not yet usable.** The COM and modelling layer works and is
-verified against a real seat; the add-in shell, agent loop and UI are not built
-yet. See [Where this actually is](#where-this-actually-is).
+**Status: loads in SOLIDWORKS, not yet conversational.** The COM layer, the
+add-in shell and the full tool surface work and are verified against a real
+seat - the add-in registers, loads, and shows its task pane. The agent loop and
+API key handling are not built yet, so it cannot yet be talked to. See
+[Where this actually is](#where-this-actually-is).
 
 ---
 
@@ -23,7 +25,11 @@ src/SwAgent.Core/       COM layer and tool implementations. No UI dependency,
   Infrastructure/       Units, dispatcher, exception boundary, redacting log
   Session/              ISldWorks ownership, selection and rebuild discipline
   Modeling/             Sketches, planes, the single FeatureExtrusion3 wrapper
-  Inspection/           Mass, volume, bounding box
+  Inspection/           Mass, volume, bounding box, feature tree, screenshots
+  Tools/                Tool registry, typed parameters, the round-trip
+
+src/SwAgent.AddIn/      ISwAddin shell, COM registration, WebView2 task pane,
+                        and the real UI-thread dispatcher.
 
 tests/SwAgent.Harness/  Headless test harness. Drives a real SOLIDWORKS session
                         from a plain console process, with no UI present.
@@ -31,7 +37,7 @@ tests/SwAgent.Harness/  Headless test harness. Drives a real SOLIDWORKS session
 refs/                   SOLIDWORKS interop assemblies, checked in so the build
                         does not depend on an install path.
 docs/                   API signature reference and empirical findings.
-tools/                  Signature dumper.
+tools/                  Signature dumper, add-in register/unregister.
 ```
 
 ## Building
@@ -50,7 +56,7 @@ The harness drives a real SOLIDWORKS session. It creates scratch documents and
 closes them **without saving** — it never writes a file.
 
 ```bash
-tests/SwAgent.Harness/bin/x64/Debug/net48/SwAgent.Harness.exe
+tests/SwAgent.Harness/bin/Debug/net48/SwAgent.Harness.exe
 
 # Diagnostics
 SwAgent.Harness.exe --probe        # plane orientation, bounding box order
