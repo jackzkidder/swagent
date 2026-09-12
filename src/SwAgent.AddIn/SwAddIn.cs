@@ -65,6 +65,25 @@ namespace SwAgent.AddIn
                 _log = new FileSwLog(FileSwLog.DefaultPath);
                 _log.Info("---- ConnectToSW ----");
 
+                // First, before anything touches a type from a dependent
+                // assembly. We have no app.config of our own - the CLR reads
+                // SLDWORKS.exe.config - so our dependencies resolve by simple
+                // name from our own directory instead of by binding redirect.
+                AssemblyRedirector.Install(_log);
+
+                var missing = AssemblyRedirector.VerifyDependencies(
+                    "SwAgent.Core", "SwAgent.Agent", "Anthropic", "System.Text.Json");
+
+                if (missing.Count > 0)
+                {
+                    string detail = string.Join(", ", missing);
+                    _log.Error($"Required dependencies could not be loaded: {detail}");
+                    TellUser(
+                        "SwAgent could not load its own components (" + detail + "). " +
+                        "The installation looks incomplete; reinstalling should fix it.");
+                    return false;
+                }
+
                 // Store the pointer we are given and use it for the add-in's
                 // whole life. Never Dispatch a new one: that can start a second
                 // SOLIDWORKS session behind the user's back.
@@ -159,7 +178,11 @@ namespace SwAgent.AddIn
                     return false;
                 }
 
-                _panel = new ChatPanelControl(_log);
+                // The panel gets the session and the dispatcher, not the raw
+                // pointer: everything it does to SOLIDWORKS goes through the
+                // dispatcher, which is what keeps COM on this thread while the
+                // agent's network calls happen elsewhere.
+                _panel = new ChatPanelControl(_log, _session, _dispatcher);
 
                 // DisplayWindowFromHandlex64, not DisplayWindowFromHandle: this
                 // is an x64 build, and the 32-bit overload takes an Int32 that
@@ -224,6 +247,9 @@ namespace SwAgent.AddIn
             try { _dispatcher?.Dispose(); }
             catch (Exception ex) { _log?.Debug($"Teardown dispatcher: {ex.Message}"); }
             finally { _dispatcher = null; }
+
+            try { AssemblyRedirector.Uninstall(); }
+            catch (Exception ex) { _log?.Debug($"Teardown resolver: {ex.Message}"); }
 
             _session = null;
 
