@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using SolidWorks.Interop.sldworks;
@@ -73,13 +74,45 @@ namespace SwAgent.Harness
             run.Step("no tool offers code execution");
             // The promise is that every capability is a named tool with typed
             // parameters. If this ever fails, the security story is gone.
-            string[] forbidden = { "eval", "exec", "run_vba", "macro", "script", "shell", "command" };
+            //
+            // Matched on EXACT names, not substrings. The substring version of
+            // this check flagged sw_shell - a CAD feature that hollows a solid
+            // - as a shell-command tool. Keyword matching against a domain
+            // vocabulary produces false positives, and a security check that
+            // cries wolf gets switched off.
+            var forbiddenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "sw_eval", "sw_exec", "sw_execute", "sw_run", "sw_run_vba", "sw_vba",
+                "sw_macro", "sw_run_macro", "sw_script", "sw_run_script",
+                "sw_shell_command", "sw_command", "sw_cmd", "sw_powershell", "sw_process",
+            };
+
             var offenders = registry.Tools
-                .Where(t => forbidden.Any(f => t.Name.ToLowerInvariant().Contains(f)))
+                .Where(t => forbiddenNames.Contains(t.Name))
                 .Select(t => t.Name)
                 .ToList();
+
             run.Assert(offenders.Count == 0,
                 offenders.Count == 0 ? "no code-execution tool is registered" : $"found: {string.Join(", ", offenders)}");
+
+            run.Step("no tool takes a free-form code or path-glob payload");
+            // The stronger property, and the one that actually matters: every
+            // parameter is typed and bounded. A tool could be called anything
+            // and still be dangerous if it accepted a script as a string.
+            var suspicious = registry.Tools
+                .SelectMany(t => t.Parameters.Select(p => new { Tool = t.Name, Param = p }))
+                .Where(x => x.Param.Type == ToolParamType.String
+                            && LooksLikeCodePayload(x.Param.Name))
+                .Select(x => $"{x.Tool}.{x.Param.Name}")
+                .ToList();
+
+            if (suspicious.Count > 0)
+                foreach (var x in suspicious) run.Note($"  {x}");
+
+            run.Assert(suspicious.Count == 0,
+                suspicious.Count == 0
+                    ? "no tool accepts code, a script or a command as a parameter"
+                    : $"found {suspicious.Count} suspicious parameter(s)");
         }
 
         /// <summary>
@@ -215,6 +248,14 @@ namespace SwAgent.Harness
         }
 
         // -----------------------------------------------------------------
+
+        /// <summary>Parameter names that would indicate an execution escape hatch.</summary>
+        private static bool LooksLikeCodePayload(string parameterName)
+        {
+            string[] names = { "code", "script", "macro", "vba", "command", "cmd", "expression", "eval" };
+            string lower = (parameterName ?? string.Empty).ToLowerInvariant();
+            return names.Any(n => lower == n || lower.EndsWith("_" + n) || lower.StartsWith(n + "_"));
+        }
 
         private static ToolResult Expect(TestRun run, ToolRegistry registry, SwSession session,
                                          string tool, JsonElement args)
