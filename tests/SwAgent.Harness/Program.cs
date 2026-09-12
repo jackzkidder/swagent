@@ -112,6 +112,12 @@ namespace SwAgent.Harness
                 RunTest(run, session, "Tool layer: malformed arguments are rejected",
                     () => ToolLayerTests.RejectsMalformedArguments(run, session));
 
+                RunTest(run, session, "Shell: uniform walls, checked by hand calculation",
+                    () => DressUpTests.ShellLeavesUniformWalls(run, session));
+
+                RunTest(run, session, "Fillet and chamfer: edges are broken",
+                    () => DressUpTests.FilletAndChamferBreakEdges(run, session));
+
                 RunTest(run, session, "Intent: the contract cannot be gamed",
                     () => IntentTests.ContractCannotBeGamed(run, session));
 

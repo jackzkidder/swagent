@@ -240,3 +240,47 @@ and `using` it shadows parts of `System`. Hit so far:
 
 `View`, `Body`, `Feature`, `Sketch`, `Annotation` and `Attribute` are all taken
 too. Check before naming anything generically.
+
+---
+
+## 11. `InsertFeatureShell` returns void, and an impossible shell still "works"
+
+Two problems, and the second is the nasty one.
+
+**It is on `IModelDoc2`, not `IFeatureManager`** - the only feature in this
+codebase that is. Searching `IFeatureManager` for "Shell" finds only
+`GetPlasticsShellType` and leads you to conclude the API does not exist.
+
+**It returns `void`.** No feature object, no success flag, no error - exactly
+like `EditUndo2`. The only way to know whether it did anything is to measure
+the volume before and after.
+
+**And a thickness too large for the part does not fail.** On a 100 mm cube:
+
+| Shell thickness | Result | Volume |
+|---|---|---|
+| 5 mm | correct hollow box | 1000 -> 230.5 cm3 |
+| 60 mm | reported success | 1000 -> **992 cm3** |
+
+A 60 mm wall cannot hollow a 100 mm cube - the walls from opposing faces
+overlap - so the honest answer is a refusal. SOLIDWORKS instead produces a
+nearly-solid body and reports nothing wrong.
+
+The volume check catches a literal no-op but cannot catch this, because
+"8 cm3 removed" is only wrong if you know roughly how hollow the part was meant
+to be. The tool does not know that; the agent does. So `sw_shell` reports how
+much material it removed, and the design-intent contract catches the rest - the
+declared volume for a hollow box will not match 992 cm3.
+
+Layered, deliberately: the tool catches what a tool can see, and the contract
+catches what only intent can judge.
+
+---
+
+## 12. A shell needs twice its thickness in every direction
+
+Worth stating plainly because the arithmetic is easy to get wrong: hollowing a
+body means fitting a wall in from BOTH sides, so a `t` mm wall needs at least
+`2t` mm of material across every direction. A 5 mm shell needs 10 mm of
+thickness everywhere; a 60 mm shell needs 120 mm, which a 100 mm cube does not
+have.

@@ -161,6 +161,9 @@ namespace SwAgent.Core.Tools.Builtin
                 new SketchLineTool(),
                 new ExtrudeTool(),
                 new CutTool(),
+                new ShellTool(),
+                new FilletTool(),
+                new ChamferTool(),
                 new RebuildTool(),
                 new UndoTool(),
 

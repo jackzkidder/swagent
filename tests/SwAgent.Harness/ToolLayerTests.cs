@@ -27,7 +27,7 @@ namespace SwAgent.Harness
             var registry = BuiltinTools.CreateRegistry();
 
             run.Step("registry is populated");
-            run.Assert(registry.Count >= 24, $"at least 24 tools registered (got {registry.Count})");
+            run.Assert(registry.Count >= 27, $"at least 27 tools registered (got {registry.Count})");
 
             run.Step("schema is valid JSON");
             string json = registry.ToJsonDefinitions();
