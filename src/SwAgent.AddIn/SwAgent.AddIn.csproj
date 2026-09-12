@@ -79,4 +79,13 @@
           Condition="Exists('%(WebView2Native.FullPath)')" />
   </Target>
 
+  <ItemGroup>
+    <!-- The task pane icon. Without it the tab is blank and genuinely hard to
+         find among the stock SOLIDWORKS tabs. Regenerate with
+         tools/make-taskpane-icon.ps1. -->
+    <None Include="Assets\taskpane.bmp">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
