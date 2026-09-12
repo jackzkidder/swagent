@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{42E6F0D4-7CF6-4A0E-BDB3-CB74FC0F54DC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SwAgent.Core", "src\SwAgent.Core\SwAgent.Core.csproj", "{57DDF594-1E46-4BE1-9923-E86EF5043388}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{BA247F55-01E4-4958-B516-1F12CD4AE8CD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SwAgent.Harness", "tests\SwAgent.Harness\SwAgent.Harness.csproj", "{812D360C-551E-468D-B4CA-1B9E60DB34C0}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{57DDF594-1E46-4BE1-9923-E86EF5043388}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{57DDF594-1E46-4BE1-9923-E86EF5043388}.Debug|Any CPU.Build.0 = Debug|x64
+		{57DDF594-1E46-4BE1-9923-E86EF5043388}.Release|Any CPU.ActiveCfg = Release|x64
+		{57DDF594-1E46-4BE1-9923-E86EF5043388}.Release|Any CPU.Build.0 = Release|x64
+		{812D360C-551E-468D-B4CA-1B9E60DB34C0}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{812D360C-551E-468D-B4CA-1B9E60DB34C0}.Debug|Any CPU.Build.0 = Debug|x64
+		{812D360C-551E-468D-B4CA-1B9E60DB34C0}.Release|Any CPU.ActiveCfg = Release|x64
+		{812D360C-551E-468D-B4CA-1B9E60DB34C0}.Release|Any CPU.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{57DDF594-1E46-4BE1-9923-E86EF5043388} = {42E6F0D4-7CF6-4A0E-BDB3-CB74FC0F54DC}
+		{812D360C-551E-468D-B4CA-1B9E60DB34C0} = {BA247F55-01E4-4958-B516-1F12CD4AE8CD}
+	EndGlobalSection
+EndGlobal

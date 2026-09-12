@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Company>JK Labs</Company>
+    <Product>SwAgent</Product>
+    <Version>0.1.0</Version>
+    <RepoRefs>$(MSBuildThisFileDirectory)refs\</RepoRefs>
+  </PropertyGroup>
+</Project>

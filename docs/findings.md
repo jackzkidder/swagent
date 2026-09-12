@@ -1,0 +1,162 @@
+# Empirical findings
+
+Things learned by running against a real SOLIDWORKS 2025 SP5 seat (interop
+33.5.0.53) that contradict either the documentation, the common guidance, or a
+reasonable assumption. Each one cost a debugging cycle; none of them would have
+been caught by code that compiles and returns success.
+
+Reproduce any of these with the probe modes in the harness:
+
+```
+SwAgent.Harness.exe --probe      # plane orientation and bounding box order
+SwAgent.Harness.exe --cutprobe   # cut end conditions and direction
+```
+
+---
+
+## 1. `swEndCondThroughAllBoth` is refused by `FeatureCut4`
+
+**Symptom.** `FeatureCut4` returns `null`. No exception, no error code, no
+indication of which of its 27 arguments was objectionable. A rebuild afterwards
+reports clean, because nothing was created.
+
+**What does not fix it.** Passing `Sd = false` (not single-ended) alongside it,
+which is the obvious reading — `ThroughAllBoth` is inherently two-ended, so the
+single-ended flag looks like the contradiction. It is not; that combination is
+refused too.
+
+**What works.** Express it as a genuinely two-ended feature rather than via the
+constant:
+
+| Argument | Value |
+|---|---|
+| `Sd` | `false` (two-ended) |
+| `T1` | `swEndCondThroughAll` |
+| `T2` | `swEndCondThroughAll` |
+
+The `swEndCondThroughAllBoth` constant exists in `swEndConditions_e` (value 9)
+and is simply not accepted on this path. Our `EndCondition.ThroughAllBoth` maps
+to the table above — see `ExtrudeOp.EndConditionDir1` / `EndConditionDir2`.
+
+**Why it matters.** A through hole sketched on the same plane the material was
+extruded from cuts in the wrong direction under plain `ThroughAll`, and removes
+nothing, so SOLIDWORKS refuses the feature. `ThroughAllBoth` is the
+direction-proof formulation and therefore the right default for a through hole.
+Without it the agent has to guess `Reverse`, and a guess that builds
+successfully in the wrong direction is precisely the failure mode we cannot
+detect from mass alone.
+
+---
+
+## 2. Cut direction does not follow boss direction
+
+On this seat, a boss extruded from the Front plane and a cut from that same
+plane run in **opposite** default directions. From `--cutprobe`:
+
+| End condition | Reverse | Result |
+|---|---|---|
+| ThroughAll | false | refused (`null`) |
+| ThroughAll | **true** | Cut-Extrude1, 23.2146 cm3 |
+| Blind 10mm | false | refused (`null`) |
+| Blind 10mm | **true** | Cut-Extrude1, 23.2146 cm3 |
+| ThroughAllBoth | n/a | Cut-Extrude1, 23.2146 cm3 |
+
+Do not assume a cut and a boss from the same sketch plane go the same way.
+Prefer `ThroughAllBoth` for through features; for blind cuts the direction must
+be verified, not assumed.
+
+---
+
+## 3. Sketch plane orientation is template-dependent — do not assume it
+
+The standard claim is that the Front plane is the XY plane with normal +Z. On
+this seat's default part template, reading `ISketch.ModelToSketchTransform`
+directly gives:
+
+| Plane | sketch X | sketch Y | extrude normal |
+|---|---|---|---|
+| Front Plane | model +Y | model +Z | model **+X** |
+| Top Plane | model +Y | model -X | model +Z |
+| Right Plane | model -X | model +Z | model +Y |
+
+`GetPartBox` **is** in ordinary `[xmin, ymin, zmin, xmax, ymax, zmax]` order —
+that part of the documentation is accurate, and `GetBodyBox` agrees with it.
+The surprise is the plane orientation, not the box.
+
+**Consequence for tests.** Reference parts assert on the bounding box
+dimensions **sorted by size**, not on which global axis each landed on. A part
+built on a template with rotated reference planes is dimensionally correct and
+would fail an `X == 60` assertion. Sorted dimensions still catch the error that
+actually matters — wrong size, including the 1000x unit error — while not
+failing on a legitimate template difference. See
+`PartMeasurements.SortedDimsMm`.
+
+**Open question.** Whether this template is non-standard or whether the
+convention is more variable than usually claimed. Either way the code must not
+depend on it, so this is not on the critical path. Worth re-checking against a
+stock template before making orientation claims in the product.
+
+---
+
+## 4. `IModelDoc2.GetErrors()` / `GetWarnings()` do not exist
+
+Remembered from somewhere; not on the interface. The real API for rebuild state
+is on `IModelDocExtension`:
+
+```csharp
+int count = doc.Extension.GetWhatsWrongCount();
+doc.Extension.GetWhatsWrong(out object features, out object codes, out object warnings);
+```
+
+This is better than what was assumed: it names the **specific failing
+features**, so the agent can be told *what* failed rather than merely *that*
+something did — which is the difference between a targeted fix and a blind
+undo.
+
+---
+
+## 5. `ShowFeatureErrorDialog` must be turned off
+
+A rebuild error can raise a modal dialog on the SOLIDWORKS thread. A modal
+dialog blocks that thread until a human clicks it, and the agent is not a human:
+the loop would hang with no timeout and no error, which the user experiences as
+the add-in freezing their CAD session.
+
+`SwSession.Rebuild` sets `doc.ShowFeatureErrorDialog = false` before every
+rebuild. Any other code path that can trigger a rebuild must do the same.
+
+---
+
+## 6. `ISketchManager.ActiveSketch` exists — use it
+
+`InsertSketch` toggles, and the usual advice is to track sketch state yourself.
+That is necessary but not sufficient: the user can click things in SOLIDWORKS
+while the agent works, and private bookkeeping drifts out of step with reality.
+
+`ActiveSketch` returns the open sketch or `null`, so the state can be
+**verified** rather than merely tracked. `SketchOps` cross-checks against it
+before every toggle and corrects its own bookkeeping from it.
+
+---
+
+## 7. `Marshal.GetActiveObject` does not always see a running SOLIDWORKS
+
+The first harness run failed to attach to an already-running session and started
+a second one. Likely a Running Object Table registration or elevation mismatch
+(SOLIDWORKS run as administrator, harness not, or vice versa).
+
+Not a problem for the add-in, which is handed its pointer in `ConnectToSW` and
+must never `Dispatch` its own. It *is* a problem for the harness, which can
+silently start a second CAD session and leave it running. Check for strays:
+
+```powershell
+Get-Process SLDWORKS | Select-Object Id, StartTime
+```
+
+---
+
+## Naming collision
+
+`SolidWorks.Interop.sldworks` exports a type called `Measure`, so our
+measurement helper is `PartMeasure`. Worth knowing before naming anything else
+generically — `View`, `Body`, `Feature` and `Sketch` are all taken too.

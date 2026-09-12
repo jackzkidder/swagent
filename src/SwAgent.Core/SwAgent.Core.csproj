@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>SwAgent.Core</AssemblyName>
+    <RootNamespace>SwAgent.Core</RootNamespace>
+    <!-- No UI here on purpose: this project must be drivable from a headless
+         test harness. Do not add a WinForms/WPF dependency to it. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference assemblies for net48 without requiring the Developer Pack. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Private=false: SOLIDWORKS loads its own interops from its install
+         directory. Shipping ours would risk binding against the wrong ones. -->
+    <Reference Include="SolidWorks.Interop.sldworks">
+      <HintPath>$(RepoRefs)SolidWorks.Interop.sldworks.dll</HintPath>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SolidWorks.Interop.swconst">
+      <HintPath>$(RepoRefs)SolidWorks.Interop.swconst.dll</HintPath>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SolidWorks.Interop.swcommands">
+      <HintPath>$(RepoRefs)SolidWorks.Interop.swcommands.dll</HintPath>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="System.Drawing" />
+  </ItemGroup>
+
+</Project>
