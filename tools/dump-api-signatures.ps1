@@ -1,5 +1,5 @@
 $ErrorActionPreference='Stop'
-$asm=[System.Reflection.Assembly]::LoadFrom('C:\Users\jack\swagent\refs\SolidWorks.Interop.sldworks.dll')
+$asm=[System.Reflection.Assembly]::LoadFrom((Join-Path (Split-Path -Parent $PSScriptRoot) 'refs\SolidWorks.Interop.sldworks.dll'))
 $types=$asm.GetTypes()
 function Dump($tn,$pattern){
   $ty=$types|?{$_.Name -eq $tn}|select -First 1
