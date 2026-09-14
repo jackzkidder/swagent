@@ -45,6 +45,12 @@ namespace SwAgent.Core.Session
         public Intent.IntentStore Intent { get; } = new Intent.IntentStore();
 
         /// <summary>
+        /// Batch plans previewed in this session. Applying one is the user's
+        /// decision, made in the panel - see <see cref="Batch.BatchPlanStore"/>.
+        /// </summary>
+        public Batch.BatchPlanStore Batches { get; } = new Batch.BatchPlanStore();
+
+        /// <summary>
         /// True while a sketch is open for editing.
         ///
         /// InsertSketch toggles: the same call that opens a sketch closes it.

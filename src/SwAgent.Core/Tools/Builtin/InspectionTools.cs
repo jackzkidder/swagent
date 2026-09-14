@@ -183,6 +183,11 @@ namespace SwAgent.Core.Tools.Builtin
                 new SaveAsTool(),
                 new ExportTool(),
 
+                // Batch - index and preview only. Applying is the user's
+                // button in the panel, never a tool.
+                new BatchIndexTool(),
+                new BatchPreviewTool(),
+
                 // Drawings
                 new DrawingCreateTool(),
                 new DrawingDimensionsTool(),

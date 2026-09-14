@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,6 +11,7 @@ using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using SwAgent.Agent;
+using SwAgent.Core.Batch;
 using SwAgent.Core.Infrastructure;
 using SwAgent.Core.Session;
 using SwAgent.Core.Tools;
@@ -47,6 +51,10 @@ namespace SwAgent.AddIn
         private CadAgent _agent;
         private CancellationTokenSource _running;
 
+        private volatile bool _batchRunning;
+        private CancellationTokenSource _batchStop;
+        private readonly ConcurrentQueue<string> _batchNotes = new ConcurrentQueue<string>();
+
         public ChatPanelControl(ISwLog log, SwSession session, ISwDispatcher dispatcher)
         {
             _log = log ?? NullSwLog.Instance;
@@ -54,6 +62,9 @@ namespace SwAgent.AddIn
             _dispatcher = dispatcher;
             _keyStore = new ApiKeyStore(log: _log);
             _registry = BuiltinTools.CreateRegistry();
+
+            if (_session != null)
+                _session.Batches.PlanCreated += OnBatchPlanCreated;
 
             Dock = DockStyle.Fill;
             BackColor = Color.White;
@@ -198,6 +209,20 @@ namespace SwAgent.AddIn
                         case "cancel":
                             _running?.Cancel();
                             break;
+
+                        case "batchApply":
+                            if (root.TryGetProperty("id", out var applyId))
+                                RunDetached(ApplyBatchAsync(applyId.GetString()));
+                            break;
+
+                        case "batchDiscard":
+                            if (root.TryGetProperty("id", out var discardId))
+                                RunDetached(DiscardBatchAsync(discardId.GetString()));
+                            break;
+
+                        case "batchStop":
+                            _batchStop?.Cancel();
+                            break;
                     }
                 }
             }
@@ -269,6 +294,12 @@ namespace SwAgent.AddIn
         {
             if (string.IsNullOrWhiteSpace(text)) return;
 
+            if (_batchRunning)
+            {
+                PostToPage(new { type = "done", stoppedBecause = "A batch is being applied. Send again when it has finished." });
+                return;
+            }
+
             try
             {
                 if (!_keyStore.TryLoad(out string apiKey))
@@ -296,7 +327,7 @@ namespace SwAgent.AddIn
                 // The loop runs off the UI thread. Everything inside it that
                 // touches COM goes back through the dispatcher, which is the
                 // whole reason the panel hands one in.
-                AgentRunResult result = await _agent.RunAsync(text, progress, _running.Token)
+                AgentRunResult result = await _agent.RunAsync(WithBatchNotes(text), progress, _running.Token)
                     .ConfigureAwait(false);
 
                 PostToPage(new
@@ -322,6 +353,194 @@ namespace SwAgent.AddIn
                 _running = null;
             }
         }
+
+        // ---------------------------------------------------------------
+        // Batches
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// A preview produced a plan: put it in front of the user, file by file.
+        /// Raised on the SOLIDWORKS thread in the middle of a tool call.
+        ///
+        /// This card is the only place file names are shown. They go to this
+        /// page, which is local, and never into the conversation.
+        /// </summary>
+        private void OnBatchPlanCreated(BatchPlan plan)
+        {
+            PostToPage(new
+            {
+                type = "batchPlan",
+                id = plan.Id,
+                title = plan.Title,
+                folder = plan.Request.Folder,
+                writesFiles = plan.WritesSourceFiles,
+                ready = plan.CountOf(BatchRowStatus.Ready),
+                unchanged = plan.CountOf(BatchRowStatus.Unchanged),
+                skipped = plan.CountOf(BatchRowStatus.Skipped),
+                rows = plan.Rows.Select((r, i) => new
+                {
+                    n = i + 1,
+                    file = r.File.RelativePath,
+                    status = Describe(r.Status),
+                    current = r.Current,
+                    proposed = r.Proposed,
+                    note = r.Reason ?? r.Warning,
+                    warn = r.Warning != null,
+                }).ToArray(),
+            });
+        }
+
+        /// <summary>
+        /// The user pressed Apply. This, and not any tool, is what applies a batch.
+        /// </summary>
+        private async Task ApplyBatchAsync(string id)
+        {
+            if (_running != null)
+            {
+                PostToPage(new { type = "batchDone", id, ok = false, message = "Wait for SwAgent to finish before applying a batch." });
+                return;
+            }
+
+            if (_batchRunning)
+            {
+                PostToPage(new { type = "batchDone", id, ok = false, message = "Another batch is being applied." });
+                return;
+            }
+
+            _batchRunning = true;
+            _batchStop = new CancellationTokenSource();
+
+            try
+            {
+                BatchPlan plan;
+                try
+                {
+                    plan = await _dispatcher.InvokeAsync(() => _session.Batches.BeginApply(id)).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    PostToPage(new { type = "batchDone", id, ok = false, message = ex.Message });
+                    return;
+                }
+
+                PostToPage(new { type = "batchStarted", id });
+                bool stopped = false;
+
+                for (int i = 0; i < plan.Rows.Count; i++)
+                {
+                    var row = plan.Rows[i];
+                    if (row.Status != BatchRowStatus.Ready) continue;
+
+                    if (_batchStop.IsCancellationRequested)
+                    {
+                        stopped = true;
+                        break;
+                    }
+
+                    int n = i + 1;
+                    PostToPage(new { type = "batchRow", id, n, status = "working", note = (string)null });
+
+                    try
+                    {
+                        // One file per dispatch: SOLIDWORKS gets its thread back
+                        // between files, so it stays responsive and Stop works.
+                        await _dispatcher.InvokeAsync(() => BatchRunner.ApplyRow(_session, plan, row)).ConfigureAwait(false);
+                    }
+                    catch (SwSessionLostException ex)
+                    {
+                        row.Status = BatchRowStatus.Failed;
+                        row.Result = ex.Message;
+                        stopped = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        row.Status = BatchRowStatus.Failed;
+                        row.Result = ex.Message;
+                    }
+
+                    PostToPage(RowUpdate(id, n, row));
+                    if (stopped) break;
+                }
+
+                if (stopped)
+                {
+                    var untouched = plan.Rows
+                        .Select((r, i) => (Row: r, N: i + 1))
+                        .Where(x => x.Row.Status == BatchRowStatus.Ready)
+                        .ToList();
+
+                    BatchRunner.MarkRemainingStopped(plan);
+                    foreach (var x in untouched) PostToPage(RowUpdate(id, x.N, x.Row));
+                }
+
+                await _dispatcher.InvokeAsync(() => _session.Batches.Finish(plan)).ConfigureAwait(false);
+
+                string outcome = plan.DescribeOutcome() + (stopped ? " It was stopped part way." : "");
+                _batchNotes.Enqueue(outcome);
+                _log.Info(outcome);
+
+                PostToPage(new { type = "batchDone", id, ok = true, message = outcome });
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Batch apply failed: {ex.Message}");
+                PostToPage(new { type = "batchDone", id, ok = false, message = "The batch stopped: " + ex.Message });
+            }
+            finally
+            {
+                _batchRunning = false;
+                try { _batchStop?.Dispose(); } catch { }
+                _batchStop = null;
+            }
+        }
+
+        private async Task DiscardBatchAsync(string id)
+        {
+            try
+            {
+                bool discarded = await _dispatcher.InvokeAsync(() => _session.Batches.Discard(id)).ConfigureAwait(false);
+                if (discarded) _batchNotes.Enqueue($"The user discarded batch plan {id}; nothing was changed.");
+
+                PostToPage(new
+                {
+                    type = "batchDone",
+                    id,
+                    ok = discarded,
+                    discarded = true,
+                    message = discarded ? "Discarded. Nothing was changed." : "This plan can no longer be discarded.",
+                });
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Batch discard failed: {ex.Message}");
+            }
+        }
+
+        private static object RowUpdate(string id, int n, BatchRow row) => new
+        {
+            type = "batchRow",
+            id,
+            n,
+            status = Describe(row.Status),
+            note = row.Result ?? row.Reason ?? row.Warning,
+        };
+
+        /// <summary>
+        /// A batch is applied outside the conversation, so the model would not
+        /// otherwise know it happened. The outcome rides along with the user's
+        /// next message - counts only, no file names.
+        /// </summary>
+        private string WithBatchNotes(string text)
+        {
+            var notes = new List<string>();
+            while (_batchNotes.TryDequeue(out string note)) notes.Add(note);
+
+            return notes.Count == 0
+                ? text
+                : "[SwAgent note: " + string.Join(" ", notes) + "]\n\n" + text;
+        }
+
+        private static string Describe(BatchRowStatus status) => status.ToString().ToLowerInvariant();
 
         private static string Describe(AgentEvent.Kind kind)
         {
@@ -398,6 +617,8 @@ namespace SwAgent.AddIn
             if (disposing)
             {
                 try { _running?.Cancel(); } catch { }
+                try { _batchStop?.Cancel(); } catch { }
+                if (_session != null) _session.Batches.PlanCreated -= OnBatchPlanCreated;
                 try { _webView?.Dispose(); }
                 catch (Exception ex) { _log.Debug($"Disposing WebView2: {ex.Message}"); }
             }

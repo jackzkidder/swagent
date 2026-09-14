@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
 using SwAgent.Core.Session;
 
@@ -86,7 +87,19 @@ namespace SwAgent.Core.Files
             if (string.IsNullOrWhiteSpace(path))
                 throw new ArgumentException("An output path is required.", nameof(path));
 
-            var doc = session.RequireModel();
+            return Export(session.RequireModel(), path, overwrite, kind);
+        }
+
+        /// <summary>
+        /// Export a specific document, which need not be the active one. Batch
+        /// exports work on documents opened in the background.
+        /// </summary>
+        public static ExportOutcome Export(IModelDoc2 doc, string path, bool overwrite,
+                                           WriteKind kind = WriteKind.Any)
+        {
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+            if (string.IsNullOrWhiteSpace(path))
+                throw new ArgumentException("An output path is required.", nameof(path));
 
             string fullPath;
             try
@@ -195,7 +208,7 @@ namespace SwAgent.Core.Files
         }
 
         /// <summary>Turn a SOLIDWORKS save error bitmask into something a person can act on.</summary>
-        private static string DescribeCode(int code)
+        internal static string DescribeCode(int code)
         {
             if (code == 0) return "no error reported";
 
@@ -222,7 +235,7 @@ namespace SwAgent.Core.Files
                 : $"error code {code}";
         }
 
-        private static string FormatSize(long bytes)
+        internal static string FormatSize(long bytes)
         {
             if (bytes < 1024) return bytes + " bytes";
             if (bytes < 1024 * 1024) return (bytes / 1024.0).ToString("0.#") + " KB";

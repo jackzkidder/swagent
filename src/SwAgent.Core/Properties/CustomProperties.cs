@@ -53,10 +53,15 @@ namespace SwAgent.Core.Properties
         /// </summary>
         public static PropertyValue Read(SwSession session, string name)
         {
-            if (string.IsNullOrWhiteSpace(name))
-                throw new ArgumentException("A property name is required.", nameof(name));
+            RequireName(name);
+            return Read(session.RequireModel(), name);
+        }
 
-            var doc = session.RequireModel();
+        /// <summary>Read from a specific document, which need not be the active one.</summary>
+        public static PropertyValue Read(IModelDoc2 doc, string name)
+        {
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+            RequireName(name);
 
             // Configuration tier first - that is the one that wins.
             var configManager = TryGetConfigurationManager(doc);
@@ -72,9 +77,12 @@ namespace SwAgent.Core.Properties
         }
 
         /// <summary>Every property on both tiers, configuration values winning.</summary>
-        public static List<PropertyValue> ReadAll(SwSession session)
+        public static List<PropertyValue> ReadAll(SwSession session) => ReadAll(session.RequireModel());
+
+        /// <summary>Every property of a specific document, configuration values winning.</summary>
+        public static List<PropertyValue> ReadAll(IModelDoc2 doc)
         {
-            var doc = session.RequireModel();
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
             var seen = new Dictionary<string, PropertyValue>(StringComparer.OrdinalIgnoreCase);
 
             // File tier first so configuration values overwrite them.
@@ -98,15 +106,21 @@ namespace SwAgent.Core.Properties
         /// </summary>
         public static PropertyTier Write(SwSession session, string name, string value, PropertyTier tier = PropertyTier.Auto)
         {
-            if (string.IsNullOrWhiteSpace(name))
-                throw new ArgumentException("A property name is required.", nameof(name));
+            RequireName(name);
+            return Write(session.RequireModel(), name, value, tier);
+        }
 
-            var doc = session.RequireModel();
+        /// <summary>Write to a specific document, which need not be the active one.</summary>
+        public static PropertyTier Write(IModelDoc2 doc, string name, string value, PropertyTier tier = PropertyTier.Auto)
+        {
+            if (doc == null) throw new ArgumentNullException(nameof(doc));
+            RequireName(name);
+
             PropertyTier target = tier;
 
             if (tier == PropertyTier.Auto)
             {
-                var existing = Read(session, name);
+                var existing = Read(doc, name);
                 target = existing.Exists ? existing.FoundOn : PropertyTier.File;
             }
 
@@ -137,6 +151,12 @@ namespace SwAgent.Core.Properties
             }
 
             return target;
+        }
+
+        private static void RequireName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                throw new ArgumentException("A property name is required.", nameof(name));
         }
 
         private static PropertyValue ReadFrom(ICustomPropertyManager manager, string name, PropertyTier tier)

@@ -87,6 +87,13 @@ namespace SwAgent.Harness
                     return WrongWayExperiment.Run(session, m >= 0 && m + 1 < args.Length ? args[m + 1] : null);
                 }
 
+                int versionAt = Array.IndexOf(args, "--versionprobe");
+                if (versionAt >= 0)
+                {
+                    BatchTests.VersionProbe(session, args, versionAt + 1);
+                    return 0;
+                }
+
                 if (Array.IndexOf(args, "--cutprobe") >= 0)
                 {
                     CutProbe.Run(session);
@@ -146,6 +153,9 @@ namespace SwAgent.Harness
 
                 RunTest(run, session, "Deliverable: material, properties, save, drawing, export",
                     () => DeliverableTests.ProducesTheWholeDeliverable(run, session));
+
+                RunTest(run, session, "Batch: folder index, dry run, approved apply",
+                    () => BatchTests.IndexPreviewApply(run, session));
 
                 // These need neither SOLIDWORKS nor an API key.
                 RunTest(run, session, "Agent: API key is stored encrypted",

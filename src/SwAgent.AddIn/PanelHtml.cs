@@ -34,12 +34,13 @@ namespace SwAgent.AddIn
     --ok: #1a7f37;
     --err: #b42318;
     --code: #f0f1f3;
+    --warn: #9a6700;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #1e1e1e; --fg: #e6e6e6; --muted: #9a9a9a; --line: #333;
       --panel: #252526; --accent: #4c8dff; --accent-fg: #10243f;
-      --ok: #3fb950; --err: #f85149; --code: #2a2a2b;
+      --ok: #3fb950; --err: #f85149; --code: #2a2a2b; --warn: #d29922;
     }
   }
 
@@ -126,6 +127,35 @@ namespace SwAgent.AddIn
   .empty { color: var(--muted); }
   .empty ul { padding-left: 18px; margin: 8px 0 0; }
   .empty li { margin-bottom: 4px; }
+
+  /* ---- batch plans ---- */
+  .batch { border: 1px solid var(--line); border-radius: 6px; margin: 8px 0 14px; background: var(--panel); }
+  .batch-head { padding: 8px 10px 2px; }
+  .batch-head .id { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .batch-head .title { font-weight: 600; word-wrap: break-word; }
+  .batch-sum { padding: 0 10px 8px; font-size: 12px; color: var(--muted); word-wrap: break-word; }
+  .batch-sum .writes { color: var(--fg); }
+  .batch-rows {
+    max-height: 240px; overflow-y: auto; background: var(--bg);
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  }
+  .brow {
+    display: grid; grid-template-columns: 32px 1fr; gap: 0 6px;
+    padding: 4px 10px; font-size: 12px; border-bottom: 1px solid var(--line);
+  }
+  .brow:last-child { border-bottom: 0; }
+  .brow .n { color: var(--muted); font-family: Consolas, monospace; }
+  .brow .file { font-family: Consolas, monospace; word-break: break-all; }
+  .brow .chg, .brow .note { grid-column: 2; color: var(--muted); word-wrap: break-word; }
+  .brow .state { font-size: 11px; text-transform: uppercase; letter-spacing: .03em; margin-right: 6px; }
+  .brow.ready .state { color: var(--accent); }
+  .brow.working .state { color: var(--fg); }
+  .brow.applied .state { color: var(--ok); }
+  .brow.failed .state, .brow.failed .note { color: var(--err); }
+  .brow.skipped, .brow.unchanged { opacity: .75; }
+  .brow .note.warn { color: var(--warn); }
+  .batch .row { padding: 8px 10px 0; margin-top: 0; }
+  .batch .msg { padding: 6px 10px 8px; margin-top: 0; }
 </style>
 </head>
 <body>
@@ -172,11 +202,13 @@ namespace SwAgent.AddIn
 <main id='chat' class='hidden'>
   <div id='transcript'></div>
   <div class='empty' id='empty'>
-    Describe a part and it will be modelled in the active session.
+    Describe a part and it will be modelled in the active session, or ask for a
+    change across a folder of existing files.
     <ul>
       <li>A 60 x 40 x 10 mm plate with a 10 mm hole in the middle</li>
       <li>A 100 x 60 x 6 mm mounting plate with four M6 clearance holes 15 mm in from each corner</li>
       <li>An 80 mm square spacer, 12 mm thick, with a 40 mm bore</li>
+      <li>Set Revision to B on every part in C:\Jobs\1234</li>
     </ul>
   </div>
 </main>
@@ -308,6 +340,147 @@ namespace SwAgent.AddIn
     show('setup');
   });
 
+  // ---- batch plans ----
+  // File names appear here and nowhere else. This page is local; the
+  // conversation with the model refers to files by row number instead.
+  var batches = {};
+  var runningBatch = null;
+  var stateLabel = {
+    ready: 'will change', unchanged: 'no change', skipped: 'skipped',
+    applied: 'done', failed: 'failed', working: 'working'
+  };
+
+  function node(tag, cls, value) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (value != null) e.textContent = value;
+    return e;
+  }
+
+  function renderBatch(m) {
+    empty.classList.add('hidden');
+    var card = node('div', 'batch');
+
+    var head = node('div', 'batch-head');
+    head.appendChild(node('div', 'id', 'Batch ' + m.id + ' \u00b7 preview, nothing changed yet'));
+    head.appendChild(node('div', 'title', m.title));
+    card.appendChild(head);
+
+    var sum = node('div', 'batch-sum', m.folder + ' \u00b7 ' + m.ready + ' will change, ' +
+      m.unchanged + ' already correct, ' + m.skipped + ' skipped. ');
+    if (m.writesFiles && m.ready > 0) sum.appendChild(node('span', 'writes', 'Applying saves each changed file in place.'));
+    card.appendChild(sum);
+
+    var list = node('div', 'batch-rows');
+    var rowEls = {};
+    (m.rows || []).forEach(function (r) {
+      var row = node('div', 'brow ' + r.status);
+      row.appendChild(node('span', 'n', '#' + r.n));
+      row.appendChild(node('span', 'file', r.file));
+
+      var chg = node('span', 'chg');
+      chg.appendChild(node('span', 'state', stateLabel[r.status] || r.status));
+      if (r.proposed != null) {
+        var from = m.writesFiles ? (r.current == null ? '(none)' : r.current) + ' ' : '';
+        chg.appendChild(document.createTextNode(from + '\u2192 ' + r.proposed));
+      }
+      row.appendChild(chg);
+
+      var note = node('span', 'note' + (r.warn ? ' warn' : ''), r.note || '');
+      if (!r.note) note.classList.add('hidden');
+      row.appendChild(note);
+
+      list.appendChild(row);
+      rowEls[r.n] = row;
+    });
+    card.appendChild(list);
+
+    var buttons = node('div', 'row');
+    var apply = node('button', null,
+      m.ready > 0 ? 'Apply ' + m.ready + (m.ready === 1 ? ' change' : ' changes') : 'Nothing to apply');
+    var discard = node('button', 'secondary', 'Discard');
+    var stop = node('button', 'secondary hidden', 'Stop');
+    apply.disabled = m.ready === 0;
+    buttons.appendChild(apply);
+    buttons.appendChild(discard);
+    buttons.appendChild(stop);
+    card.appendChild(buttons);
+
+    var msg = node('div', 'msg');
+    card.appendChild(msg);
+
+    batches[m.id] = { rows: rowEls, apply: apply, discard: discard, stop: stop, msg: msg };
+
+    apply.addEventListener('click', function () {
+      if (busy || runningBatch) {
+        msg.className = 'msg err';
+        msg.textContent = busy ? 'Wait for SwAgent to finish first.' : 'Another batch is being applied.';
+        return;
+      }
+      apply.disabled = true;
+      discard.disabled = true;
+      msg.className = 'msg';
+      msg.textContent = 'Applying...';
+      post({ type: 'batchApply', id: m.id });
+    });
+
+    discard.addEventListener('click', function () {
+      apply.disabled = true;
+      discard.disabled = true;
+      post({ type: 'batchDiscard', id: m.id });
+    });
+
+    stop.addEventListener('click', function () {
+      stop.disabled = true;
+      msg.textContent = 'Stopping after the current file...';
+      post({ type: 'batchStop' });
+    });
+
+    // The card arrives mid-turn; later activity belongs below it.
+    transcript.appendChild(card);
+    activityBox = null;
+    scroll();
+  }
+
+  function batchStarted(m) {
+    var b = batches[m.id];
+    if (!b) return;
+    runningBatch = m.id;
+    b.stop.classList.remove('hidden');
+    b.stop.disabled = false;
+    sendBtn.disabled = true;
+    input.disabled = true;
+  }
+
+  function batchRow(m) {
+    var b = batches[m.id];
+    var row = b && b.rows[m.n];
+    if (!row) return;
+    row.className = 'brow ' + m.status;
+    row.querySelector('.state').textContent = stateLabel[m.status] || m.status;
+    var note = row.querySelector('.note');
+    note.textContent = m.note || '';
+    note.className = 'note' + (m.note ? '' : ' hidden');
+    if (m.status === 'working') row.scrollIntoView({ block: 'nearest' });
+  }
+
+  function batchDone(m) {
+    var b = batches[m.id];
+    if (!b) return;
+    if (runningBatch === m.id) {
+      runningBatch = null;
+      sendBtn.disabled = busy;
+      input.disabled = busy;
+    }
+    b.stop.classList.add('hidden');
+    b.msg.className = 'msg ' + (m.ok ? 'ok' : 'err');
+    b.msg.textContent = m.message || '';
+    var finished = !!(m.ok || m.discarded);
+    b.apply.disabled = finished;
+    b.discard.disabled = finished;
+    scroll();
+  }
+
   // ---- host messages ----
   if (host) {
     host.addEventListener('message', function (e) {
@@ -359,6 +532,22 @@ namespace SwAgent.AddIn
           if (m.stoppedBecause) addTurn('SwAgent', m.stoppedBecause);
           if (m.cost) el('cost').textContent = m.cost;
           activityBox = null;
+          break;
+
+        case 'batchPlan':
+          renderBatch(m);
+          break;
+
+        case 'batchStarted':
+          batchStarted(m);
+          break;
+
+        case 'batchRow':
+          batchRow(m);
+          break;
+
+        case 'batchDone':
+          batchDone(m);
           break;
 
         case 'cost':

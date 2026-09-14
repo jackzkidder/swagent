@@ -320,3 +320,26 @@ the source feature removed - but the agent saw that number one tool call ago.
 
 The same shape as the shell finding: the tool reports what a tool can measure,
 and the judgement belongs one level up.
+
+---
+
+## 14. `VersionHistory` entries are a format number plus the releases that wrote it
+
+**Symptom.** Reading the last number in a history entry as a release year
+fails on every file. The newest entry of a part shipped with SOLIDWORKS 2025
+reads `18000[2024/232,2025/268]`, whose last number is a build.
+
+**What it is.** `ISldWorks.VersionHistory(path)` returns one string per format
+the file has passed through, oldest first, without opening the file. Each is
+`<format>[<release>/<build>,<release>/<build>...]`: the leading number is the
+internal file format, the brackets list the releases and builds that wrote it.
+Installed sample parts carry 50-65 entries, back to `629[1997/218]`.
+
+**What we use.** The newest release named in the LAST entry, compared with the
+seat's release (revision major + 1992, so 33 is 2025). If that release is older
+than the seat, saving the file here upgrades it, and a batch skips it unless the
+user accepts the upgrade. The format number is deliberately not compared: 2024
+and 2025 both appear against format 18000, so it does not say which release
+can open the result.
+
+Reproduce with `SwAgent.Harness.exe --versionprobe <file> ...`.
