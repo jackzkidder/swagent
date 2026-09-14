@@ -79,7 +79,7 @@ Current state: **201 assertions passing** against SOLIDWORKS 2025 SP5.
 ## Building the installer
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File installeruild-installer.ps1
+powershell -ExecutionPolicy Bypass -File installer\build-installer.ps1
 ```
 
 Produces `artifacts\SwAgent-<version>-x64.msi`. Needs the WiX .NET tool:

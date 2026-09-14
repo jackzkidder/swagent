@@ -189,7 +189,7 @@ compiling against the oldest supported interop is the standard strategy.
 `Configuration`, so this looks reasonable and is a trap:
 
 ```xml
-<OutputPath>$(MSBuildProjectDirectory)in\$(Configuration)\</OutputPath>
+<OutputPath>$(MSBuildProjectDirectory)\bin\$(Configuration)\</OutputPath>
 ```
 
 It expands with `$(Configuration)` empty, producing `bin
