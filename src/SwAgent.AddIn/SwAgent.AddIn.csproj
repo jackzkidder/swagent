@@ -88,4 +88,12 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The task pane page. A real file rather than a C# string so it can be
+         opened in a browser against a fake host (tools/preview-panel.ps1), and
+         embedded rather than copied beside the DLL so there is no loose file
+         for the installer to miss. -->
+    <EmbeddedResource Include="Panel\panel.html" LogicalName="SwAgent.AddIn.Panel.panel.html" />
+  </ItemGroup>
+
 </Project>

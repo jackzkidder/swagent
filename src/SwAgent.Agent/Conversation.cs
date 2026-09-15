@@ -60,6 +60,13 @@ namespace SwAgent.Agent
 
         public int EntryCount => _entries.Count;
 
+        /// <summary>
+        /// True when a request can be sent as the history stands: the last
+        /// entry is the user's text or tool results, not the model's own turn.
+        /// </summary>
+        public bool EndsWithUserTurn =>
+            _entries.Count > 0 && _entries[_entries.Count - 1].Kind != EntryKind.Assistant;
+
         public void AddUserText(string text)
         {
             _entries.Add(new Entry { Kind = EntryKind.UserText, Text = text });

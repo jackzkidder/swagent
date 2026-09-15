@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -10,6 +11,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using SolidWorks.Interop.swconst;
 using SwAgent.Agent;
 using SwAgent.Core.Batch;
 using SwAgent.Core.Infrastructure;
@@ -55,6 +57,24 @@ namespace SwAgent.AddIn
         private CancellationTokenSource _batchStop;
         private readonly ConcurrentQueue<string> _batchNotes = new ConcurrentQueue<string>();
 
+        /// <summary>
+        /// What conversations closed by New chat or a key change cost. The
+        /// meter lives on the agent, which is discarded then, and the session
+        /// total the user sees must not reset with it.
+        /// </summary>
+        private decimal _closedConversationsCost;
+
+        /// <summary>
+        /// The only pages the panel can open. The page names a destination and
+        /// never supplies a URL, so nothing that reaches the page - model text
+        /// included - can make it open an arbitrary address.
+        /// </summary>
+        private static readonly Dictionary<string, string> ExternalPages = new Dictionary<string, string>
+        {
+            ["keys"] = "https://console.anthropic.com/settings/keys",
+            ["billing"] = "https://console.anthropic.com/settings/billing",
+        };
+
         public ChatPanelControl(ISwLog log, SwSession session, ISwDispatcher dispatcher)
         {
             _log = log ?? NullSwLog.Instance;
@@ -66,18 +86,24 @@ namespace SwAgent.AddIn
             if (_session != null)
                 _session.Batches.PlanCreated += OnBatchPlanCreated;
 
+            // Paint the page's own background before it loads. Otherwise a dark
+            // SOLIDWORKS flashes a white pane every time it starts.
+            bool dark = SolidWorksTheme() == "dark";
+            Color ground = dark ? Color.FromArgb(0x1d, 0x1e, 0x21) : Color.White;
+
             Dock = DockStyle.Fill;
-            BackColor = Color.White;
+            BackColor = ground;
 
             _fallback = new Label
             {
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleCenter,
                 Padding = new Padding(16),
+                ForeColor = dark ? Color.FromArgb(0xe7, 0xe9, 0xec) : Color.FromArgb(0x16, 0x18, 0x1d),
                 Text = "Starting SwAgent…",
             };
 
-            _webView = new WebView2 { Dock = DockStyle.Fill, Visible = false };
+            _webView = new WebView2 { Dock = DockStyle.Fill, Visible = false, DefaultBackgroundColor = ground };
 
             Controls.Add(_webView);
             Controls.Add(_fallback);
@@ -210,6 +236,23 @@ namespace SwAgent.AddIn
                             _running?.Cancel();
                             break;
 
+                        case "retry":
+                            RunDetached(RunAgentAsync(null));
+                            break;
+
+                        case "newChat":
+                            StartNewChat();
+                            break;
+
+                        case "openUrl":
+                            if (root.TryGetProperty("url", out var pageProp))
+                                OpenExternalPage(pageProp.GetString());
+                            break;
+
+                        case "openLogs":
+                            OpenLogFolder();
+                            break;
+
                         case "batchApply":
                             if (root.TryGetProperty("id", out var applyId))
                                 RunDetached(ApplyBatchAsync(applyId.GetString()));
@@ -254,7 +297,45 @@ namespace SwAgent.AddIn
                 hasKey = masked != null,
                 maskedKey = masked,
                 model = ModelIds.Opus5,
+                version = typeof(ChatPanelControl).Assembly.GetName().Version.ToString(3),
+                theme = SolidWorksTheme(),
+                sessionCostUsd = SessionCost(),
             });
+        }
+
+        /// <summary>
+        /// "dark" or "light" to match the SOLIDWORKS interface, or null to let
+        /// the page follow Windows. SOLIDWORKS has its own brightness setting,
+        /// and a dark pane in a light CAD window looks broken rather than themed.
+        ///
+        /// Reads the FeatureManager background - the thing that sits right next
+        /// to this pane - and judges it by luminance, rather than relying on
+        /// the theme enum keeping its meaning across releases.
+        /// </summary>
+        private string SolidWorksTheme()
+        {
+            try
+            {
+                if (_session?.App == null) return null;
+
+                _session.App.GetInterfaceBrightnessThemeColors(out object colors);
+
+                int index = (int)swInterfaceBrightnessColor_e.swIBColor_FeatureMgrBkgnd;
+                if (!(colors is Array values) || values.Length <= index) return null;
+
+                // A COLORREF (0x00BBGGRR). The themes are greys, so channel order
+                // barely matters, but read it properly anyway.
+                int bgr = Convert.ToInt32(values.GetValue(index));
+                int r = bgr & 0xFF, g = (bgr >> 8) & 0xFF, b = (bgr >> 16) & 0xFF;
+                double luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0;
+
+                return luminance < 0.5 ? "dark" : "light";
+            }
+            catch (Exception ex)
+            {
+                _log.Debug($"Could not read the SOLIDWORKS theme: {ex.Message}");
+                return null;
+            }
         }
 
         private async Task ValidateAndSaveKeyAsync(string key)
@@ -268,7 +349,7 @@ namespace SwAgent.AddIn
                 if (validation.IsValid)
                 {
                     _keyStore.Save(key);
-                    _agent = null; // rebuilt with the new key on next use
+                    DropAgent(); // rebuilt with the new key on next use
 
                     PostToPage(new
                     {
@@ -280,7 +361,7 @@ namespace SwAgent.AddIn
                 }
                 else
                 {
-                    PostToPage(new { type = "keyResult", ok = false, message = validation.Message });
+                    PostToPage(new { type = "keyResult", ok = false, code = Describe(validation.Result), message = validation.Message });
                 }
             }
             catch (Exception ex)
@@ -290,67 +371,146 @@ namespace SwAgent.AddIn
             }
         }
 
+        /// <summary>
+        /// Run the agent on the user's message. With null, retry instead:
+        /// continue the conversation as it stands after a failed request,
+        /// without repeating the message.
+        /// </summary>
         private async Task RunAgentAsync(string text)
         {
-            if (string.IsNullOrWhiteSpace(text)) return;
+            if (text != null && string.IsNullOrWhiteSpace(text)) return;
+
+            if (_running != null)
+            {
+                // The page never sends while a run is live. Two loops on one
+                // conversation would interleave its history, so refuse quietly.
+                _log.Error("A run was requested while another was in progress; ignored.");
+                return;
+            }
 
             if (_batchRunning)
             {
-                PostToPage(new { type = "done", stoppedBecause = "A batch is being applied. Send again when it has finished." });
+                PostToPage(new { type = "done", completed = false, code = "busy", stoppedBecause = "A batch is being applied. Send again when it has finished." });
                 return;
             }
+
+            var running = new CancellationTokenSource();
 
             try
             {
                 if (!_keyStore.TryLoad(out string apiKey))
                 {
-                    PostToPage(new { type = "done", stoppedBecause = "No API key is set." });
+                    PostToPage(new { type = "done", completed = false, code = "no_key", stoppedBecause = "No API key is set." });
+                    return;
+                }
+
+                if (text == null && (_agent == null || !_agent.CanResume))
+                {
+                    PostToPage(new { type = "done", completed = false, code = "nothing_to_retry", stoppedBecause = "There is nothing to retry. Send your message again." });
                     return;
                 }
 
                 if (_agent == null)
                     _agent = new CadAgent(apiKey, _dispatcher, _session, _registry, _log);
 
-                _running = new CancellationTokenSource();
+                CadAgent agent = _agent;
+                decimal costBefore = agent.Cost.EstimatedCostUsd;
+                _running = running;
 
                 // Progress arrives on worker threads; PostToPage marshals back
-                // onto the UI thread itself.
+                // onto the UI thread itself. Replies and failures go across
+                // whole; a tool result is one line (see FirstLine).
                 var progress = new Progress<AgentEvent>(ev => PostToPage(new
                 {
                     type = "agent",
                     kind = Describe(ev.Type),
-                    message = FirstLine(ev.Message),
+                    message = ev.Type == AgentEvent.Kind.ToolResult ? FirstLine(ev.Message) : ev.Message,
                     toolName = ev.ToolName,
                     ok = ev.Ok,
+                    code = ev.Code,
                 }));
 
                 // The loop runs off the UI thread. Everything inside it that
                 // touches COM goes back through the dispatcher, which is the
                 // whole reason the panel hands one in.
-                AgentRunResult result = await _agent.RunAsync(WithBatchNotes(text), progress, _running.Token)
+                string message = text == null ? null : WithBatchNotes(text);
+                AgentRunResult result = await agent.RunAsync(message, progress, running.Token)
                     .ConfigureAwait(false);
 
                 PostToPage(new
                 {
                     type = "done",
                     completed = result.Completed,
+                    stopped = running.IsCancellationRequested,
                     stoppedBecause = result.StoppedBecause,
-                    cost = _agent.Cost.Describe(),
+                    runCostUsd = agent.Cost.EstimatedCostUsd - costBefore,
+                    sessionCostUsd = SessionCost(),
+                    costDetail = agent.Cost.Describe(),
                 });
             }
             catch (OperationCanceledException)
             {
-                PostToPage(new { type = "done", stoppedBecause = "Stopped." });
+                PostToPage(new { type = "done", completed = false, stopped = true, stoppedBecause = "Stopped.", sessionCostUsd = SessionCost() });
             }
             catch (Exception ex)
             {
                 _log.Error($"Agent run failed: {ex.Message}");
-                PostToPage(new { type = "done", stoppedBecause = "The agent stopped: " + ex.Message });
+                PostToPage(new { type = "done", completed = false, code = "unexpected", stoppedBecause = "The agent stopped: " + ex.Message, sessionCostUsd = SessionCost() });
             }
             finally
             {
-                try { _running?.Dispose(); } catch { }
-                _running = null;
+                if (ReferenceEquals(_running, running)) _running = null;
+                try { running.Dispose(); } catch { }
+            }
+        }
+
+        private void StartNewChat()
+        {
+            if (_running != null || _batchRunning) return;
+
+            DropAgent();
+            PostToPage(new { type = "chatReset", sessionCostUsd = SessionCost() });
+        }
+
+        /// <summary>Forget the conversation, keeping what it cost in the session total.</summary>
+        private void DropAgent()
+        {
+            CadAgent agent = _agent;
+            _agent = null;
+            if (agent != null) _closedConversationsCost += agent.Cost.EstimatedCostUsd;
+        }
+
+        private decimal SessionCost() => _closedConversationsCost + (_agent?.Cost.EstimatedCostUsd ?? 0m);
+
+        private void OpenExternalPage(string page)
+        {
+            if (page == null || !ExternalPages.TryGetValue(page, out string url))
+            {
+                _log.Debug($"Panel asked to open an unknown page: {page}");
+                return;
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Could not open {url}: {ex.Message}");
+            }
+        }
+
+        private void OpenLogFolder()
+        {
+            try
+            {
+                string folder = Path.GetDirectoryName(FileSwLog.DefaultPath);
+                Directory.CreateDirectory(folder);
+                Process.Start(new ProcessStartInfo("explorer.exe", "\"" + folder + "\"") { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Could not open the log folder: {ex.Message}");
             }
         }
 
@@ -541,6 +701,17 @@ namespace SwAgent.AddIn
         }
 
         private static string Describe(BatchRowStatus status) => status.ToString().ToLowerInvariant();
+
+        private static string Describe(KeyValidationResult result)
+        {
+            switch (result)
+            {
+                case KeyValidationResult.InvalidKey: return "bad_key";
+                case KeyValidationResult.NoCredit: return "no_credit";
+                case KeyValidationResult.NoNetwork: return "network";
+                default: return "unknown";
+            }
+        }
 
         private static string Describe(AgentEvent.Kind kind)
         {

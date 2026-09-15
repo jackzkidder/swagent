@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,6 +22,14 @@ namespace SwAgent.Agent
         public string Message { get; set; }
         public string ToolName { get; set; }
         public bool Ok { get; set; } = true;
+
+        /// <summary>
+        /// For <see cref="Kind.Failed"/>: a stable code for what went wrong
+        /// (no_credit, bad_key, network, rate_limited, overloaded, api_error,
+        /// refused, turn_limit, session_lost, unexpected), so the panel can
+        /// offer the action that fixes it instead of parsing the message.
+        /// </summary>
+        public string Code { get; set; }
     }
 
     /// <summary>What a completed run produced.</summary>
@@ -109,7 +118,18 @@ namespace SwAgent.Agent
         {
             var result = new AgentRunResult();
             int pushbacks = 0;
-            _conversation.AddUserText(userMessage);
+
+            // Null continues the conversation as it stands: the panel's Retry
+            // after a failed request, which must not repeat the user's message.
+            if (userMessage != null)
+                _conversation.AddUserText(userMessage);
+
+            // Tool calls the model has made that have no result yet. If the run
+            // ends while any are open - Stop, a lost session, an exception - they
+            // are answered with a placeholder, because the API rejects every later
+            // request in a conversation holding a tool_use with no tool_result.
+            List<(string Id, string Name, JsonElement Input)> openCalls = null;
+            List<ToolResultEntry> openResults = null;
 
             var tools = AnthropicToolAdapter.ToSdkTools(_registry);
 
@@ -125,8 +145,9 @@ namespace SwAgent.Agent
 
                     if (response == null)
                     {
+                        // SendWithRetriesAsync has already reported the specific
+                        // failure. A second, generic event would bury it.
                         result.StoppedBecause = "The request to Anthropic could not be completed.";
-                        progress?.Report(new AgentEvent { Type = AgentEvent.Kind.Failed, Message = result.StoppedBecause, Ok = false });
                         return Finish(result);
                     }
 
@@ -140,7 +161,7 @@ namespace SwAgent.Agent
                         result.StoppedBecause =
                             "Anthropic declined this request. Rephrasing it usually helps; " +
                             "if it persists, the request may be outside what the model will do.";
-                        progress?.Report(new AgentEvent { Type = AgentEvent.Kind.Failed, Message = result.StoppedBecause, Ok = false });
+                        progress?.Report(new AgentEvent { Type = AgentEvent.Kind.Failed, Code = "refused", Message = result.StoppedBecause, Ok = false });
                         return Finish(result);
                     }
 
@@ -219,6 +240,8 @@ namespace SwAgent.Agent
                     }
 
                     var toolResults = new List<ToolResultEntry>();
+                    openCalls = pendingToolUses;
+                    openResults = toolResults;
 
                     foreach (var call in pendingToolUses)
                     {
@@ -252,9 +275,10 @@ namespace SwAgent.Agent
                         // sending forty more tool calls into a dead pointer.
                         if (toolResult.ErrorKind == "session_lost")
                         {
-                            _conversation.AddToolResults(toolResults);
+                            CloseOpenToolUses(openCalls, openResults, "Not run: the SOLIDWORKS session was lost.");
+                            openCalls = null;
                             result.StoppedBecause = toolResult.Text;
-                            progress?.Report(new AgentEvent { Type = AgentEvent.Kind.Failed, Message = toolResult.Text, Ok = false });
+                            progress?.Report(new AgentEvent { Type = AgentEvent.Kind.Failed, Code = "session_lost", Message = toolResult.Text, Ok = false });
                             return Finish(result);
                         }
                     }
@@ -263,16 +287,18 @@ namespace SwAgent.Agent
                     // user message. Splitting them teaches the model to stop
                     // requesting tools in parallel.
                     _conversation.AddToolResults(toolResults);
+                    openCalls = null;
                 }
 
                 result.StoppedBecause =
                     $"Stopped after {MaxTurns} tool calls without finishing. The part may be " +
                     "partly built; check the feature tree before continuing.";
-                progress?.Report(new AgentEvent { Type = AgentEvent.Kind.Failed, Message = result.StoppedBecause, Ok = false });
+                progress?.Report(new AgentEvent { Type = AgentEvent.Kind.Failed, Code = "turn_limit", Message = result.StoppedBecause, Ok = false });
                 return Finish(result);
             }
             catch (OperationCanceledException)
             {
+                CloseOpenToolUses(openCalls, openResults, "Not run: the user stopped SwAgent before this step.");
                 result.StoppedBecause = "Cancelled.";
                 return Finish(result);
             }
@@ -281,9 +307,43 @@ namespace SwAgent.Agent
                 // The loop runs on a worker, but the UI calling it lives inside
                 // SOLIDWORKS. Nothing escapes.
                 _log.Error($"Agent loop failed: {ex}");
+                CloseOpenToolUses(openCalls, openResults, "Not run: SwAgent stopped unexpectedly before this step.");
                 result.StoppedBecause = $"The agent stopped unexpectedly: {ex.Message}";
-                progress?.Report(new AgentEvent { Type = AgentEvent.Kind.Failed, Message = result.StoppedBecause, Ok = false });
+                progress?.Report(new AgentEvent { Type = AgentEvent.Kind.Failed, Code = "unexpected", Message = result.StoppedBecause, Ok = false });
                 return Finish(result);
+            }
+        }
+
+        /// <summary>
+        /// Whether <see cref="RunAsync"/> can be called with a null message to
+        /// pick up where a failed run left off. False once the model has had
+        /// the last word, since the next request must then come from the user.
+        /// </summary>
+        public bool CanResume => _conversation.EndsWithUserTurn;
+
+        /// <summary>
+        /// Answer every open tool call that has no result, then record the
+        /// results. Never throws: it runs inside the loop's own catch blocks.
+        /// </summary>
+        private void CloseOpenToolUses(
+            List<(string Id, string Name, JsonElement Input)> calls, List<ToolResultEntry> results, string reason)
+        {
+            if (calls == null || results == null) return;
+
+            try
+            {
+                var answered = new HashSet<string>(results.Select(r => r.ToolUseId));
+                foreach (var call in calls)
+                {
+                    if (!answered.Contains(call.Id))
+                        results.Add(new ToolResultEntry(call.Id, reason, null, isError: true));
+                }
+
+                _conversation.AddToolResults(results);
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Could not close open tool calls: {ex.Message}");
             }
         }
 
@@ -429,21 +489,22 @@ namespace SwAgent.Agent
                     progress?.Report(new AgentEvent
                     {
                         Type = AgentEvent.Kind.Failed,
+                        Code = "bad_key",
                         Ok = false,
-                        Message = "Your API key was rejected. Check it in SwAgent settings and re-enter it.",
+                        Message = "Anthropic rejected your API key. It may have been revoked or deleted; enter a new one.",
                     });
                     return null;
                 }
                 catch (AnthropicRateLimitException ex)
                 {
-                    if (attempt == maxAttempts) { ReportGaveUp(progress, "rate limited"); return null; }
+                    if (attempt == maxAttempts) { ReportGaveUp(progress, "rate limited", "rate_limited"); return null; }
                     await BackOffAsync(attempt, "Rate limited", progress, cancellationToken).ConfigureAwait(false);
                     _log.Debug($"429 on attempt {attempt}: {ex.Message}");
                 }
                 catch (Anthropic5xxException ex)
                 {
                     // 529 (overloaded) arrives here alongside ordinary 5xx.
-                    if (attempt == maxAttempts) { ReportGaveUp(progress, "Anthropic is overloaded"); return null; }
+                    if (attempt == maxAttempts) { ReportGaveUp(progress, "Anthropic is overloaded", "overloaded"); return null; }
                     await BackOffAsync(attempt, "Anthropic is busy", progress, cancellationToken).ConfigureAwait(false);
                     _log.Debug($"5xx on attempt {attempt}: {ex.Message}");
                 }
@@ -453,7 +514,13 @@ namespace SwAgent.Agent
                     // and the message is the actionable part.
                     string message = DescribeApiFailure(ex);
                     _log.Error($"API error: {ex.Message}");
-                    progress?.Report(new AgentEvent { Type = AgentEvent.Kind.Failed, Message = message, Ok = false });
+                    progress?.Report(new AgentEvent
+                    {
+                        Type = AgentEvent.Kind.Failed,
+                        Code = IsOutOfCredit(ex) ? "no_credit" : "api_error",
+                        Message = message,
+                        Ok = false,
+                    });
                     return null;
                 }
                 catch (Exception ex) when (!(ex is OperationCanceledException))
@@ -464,6 +531,7 @@ namespace SwAgent.Agent
                         progress?.Report(new AgentEvent
                         {
                             Type = AgentEvent.Kind.Failed,
+                            Code = "network",
                             Ok = false,
                             Message = "Could not reach api.anthropic.com. Check the network connection.",
                         });
@@ -477,28 +545,65 @@ namespace SwAgent.Agent
             return null;
         }
 
-        private static string DescribeApiFailure(AnthropicApiException ex)
+        private static bool IsOutOfCredit(AnthropicApiException ex)
         {
             string raw = ex.Message ?? string.Empty;
+            return raw.IndexOf("credit", StringComparison.OrdinalIgnoreCase) >= 0
+                || raw.IndexOf("billing", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
 
+        private static string DescribeApiFailure(AnthropicApiException ex)
+        {
             // Insufficient credit is its own actionable state, not a generic
             // API error: the user has to go and top up, and no amount of
             // retrying will help.
-            if (raw.IndexOf("credit", StringComparison.OrdinalIgnoreCase) >= 0
-                || raw.IndexOf("billing", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (IsOutOfCredit(ex))
             {
                 return "Your Anthropic account is out of credit. Add credit at console.anthropic.com, " +
                        "then try again.";
             }
 
-            return "Anthropic rejected the request: " + raw;
+            return "Anthropic rejected the request: " + ApiErrorMessage(ex.Message);
         }
 
-        private void ReportGaveUp(IProgress<AgentEvent> progress, string why)
+        /// <summary>
+        /// The SDK's message is a status line followed by the raw JSON body,
+        /// which is unreadable in a task pane. The human part is error.message
+        /// inside that body; fall back to the whole string if it is not there.
+        /// </summary>
+        private static string ApiErrorMessage(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return "no details were given.";
+
+            int brace = raw.IndexOf('{');
+            if (brace >= 0)
+            {
+                try
+                {
+                    using (var doc = JsonDocument.Parse(raw.Substring(brace)))
+                    {
+                        if (doc.RootElement.TryGetProperty("error", out var error)
+                            && error.ValueKind == JsonValueKind.Object
+                            && error.TryGetProperty("message", out var message)
+                            && message.ValueKind == JsonValueKind.String)
+                        {
+                            return message.GetString();
+                        }
+                    }
+                }
+                catch (JsonException)
+                {
+                }
+            }
+
+            return raw.Trim();
+        }
+
+        private void ReportGaveUp(IProgress<AgentEvent> progress, string why, string code)
         {
             string message = $"Gave up after several retries ({why}). Try again in a moment.";
             _log.Error(message);
-            progress?.Report(new AgentEvent { Type = AgentEvent.Kind.Failed, Message = message, Ok = false });
+            progress?.Report(new AgentEvent { Type = AgentEvent.Kind.Failed, Code = code, Message = message, Ok = false });
         }
 
         /// <summary>Exponential backoff, reported so the user sees waiting rather than hanging.</summary>
