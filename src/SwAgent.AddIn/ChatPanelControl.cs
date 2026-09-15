@@ -89,7 +89,8 @@ namespace SwAgent.AddIn
             // Paint the page's own background before it loads. Otherwise a dark
             // SOLIDWORKS flashes a white pane every time it starts.
             bool dark = SolidWorksTheme() == "dark";
-            Color ground = dark ? Color.FromArgb(0x1d, 0x1e, 0x21) : Color.White;
+            // Must match --bg in Panel/panel.html for each theme.
+            Color ground = dark ? Color.FromArgb(0x26, 0x26, 0x24) : Color.FromArgb(0xfa, 0xf9, 0xf5);
 
             Dock = DockStyle.Fill;
             BackColor = ground;
@@ -99,7 +100,7 @@ namespace SwAgent.AddIn
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleCenter,
                 Padding = new Padding(16),
-                ForeColor = dark ? Color.FromArgb(0xe7, 0xe9, 0xec) : Color.FromArgb(0x16, 0x18, 0x1d),
+                ForeColor = dark ? Color.FromArgb(0xf1, 0xef, 0xe8) : Color.FromArgb(0x1f, 0x1e, 0x1b),
                 Text = "Starting SwAgent…",
             };
 

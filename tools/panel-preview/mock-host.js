@@ -21,6 +21,14 @@
     document.documentElement.style.boxShadow = '1px 0 0 #c9ced6';
   }
 
+  // ?still=1 turns entrance animations off. A headless screenshot can land
+  // mid-fade, which makes a finished screen look half-drawn.
+  if (params.get('still')) {
+    var still = document.createElement('style');
+    still.textContent = '*, *::before, *::after { animation: none !important; transition: none !important; }';
+    document.head.appendChild(still);
+  }
+
   function emit(msg) {
     listeners.forEach(function (fn) { fn({ data: msg }); });
   }

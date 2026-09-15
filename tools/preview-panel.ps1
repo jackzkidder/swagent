@@ -69,7 +69,7 @@ try {
                 '--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run',
                 '--force-device-scale-factor=1', "--window-size=$windowWidth,$Height",
                 '--virtual-time-budget=4000', "--user-data-dir=`"$profileDir`"",
-                "--screenshot=`"$png`"", "`"$base`?theme=$t&w=$Width#$s`""
+                "--screenshot=`"$png`"", "`"$base`?theme=$t&w=$Width&still=1#$s`""
             )
             Start-Process -FilePath $edge -ArgumentList $edgeArgs -Wait -NoNewWindow
 
