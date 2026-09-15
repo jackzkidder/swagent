@@ -155,6 +155,7 @@ namespace SwAgent.Core.Tools.Builtin
                 new NewPartTool(),
                 new SketchOpenTool(),
                 new SketchOnFaceTool(),
+                new SketchOnSelectedFaceTool(),
                 new SketchCloseTool(),
                 new SketchRectTool(),
                 new SketchCircleTool(),
@@ -168,11 +169,13 @@ namespace SwAgent.Core.Tools.Builtin
                 new ChamferTool(),
                 new RebuildTool(),
                 new UndoTool(),
+                new RevertToRequestStartTool(),
 
                 // Inspection
                 new FeatureTreeTool(),
                 new MassPropertiesTool(),
                 new ScreenshotTool(),
+                new SelectionTool(),
 
                 // Properties and materials
                 new PropertyReadTool(),

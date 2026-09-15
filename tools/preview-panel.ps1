@@ -16,7 +16,7 @@
     powershell -ExecutionPolicy Bypass -File tools\preview-panel.ps1 -Scenario done,error -Width 300 -Theme dark
 #>
 param(
-    [string[]]$Scenario = @('setup', 'setup-error', 'empty', 'menu', 'working', 'done', 'stopped', 'error', 'batch'),
+    [string[]]$Scenario = @('setup', 'setup-error', 'settings', 'empty', 'menu', 'working', 'done', 'stopped', 'error', 'batch'),
     [ValidateSet('light', 'dark', 'both')]
     [string]$Theme = 'both',
     [int]$Width = 340,

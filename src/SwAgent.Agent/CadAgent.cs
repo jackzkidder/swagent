@@ -83,10 +83,17 @@ namespace SwAgent.Agent
             ISwDispatcher dispatcher,
             SwSession session,
             ToolRegistry registry,
-            ISwLog log = null)
+            ISwLog log = null,
+            string model = null)
         {
             if (string.IsNullOrWhiteSpace(apiKey))
                 throw new ArgumentException("An API key is required.", nameof(apiKey));
+
+            // The model must be settled BEFORE the cost meter is built: the
+            // meter takes its rates from it, and a meter built for Opus while
+            // the run uses Sonnet reports a number that is wrong by 2.5x. That
+            // is worse than no estimate, because the user believes it.
+            if (!string.IsNullOrWhiteSpace(model)) Model = model.Trim();
 
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
             _session = session ?? throw new ArgumentNullException(nameof(session));

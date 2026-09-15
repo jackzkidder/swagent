@@ -154,6 +154,15 @@ namespace SwAgent.Harness
                 RunTest(run, session, "Deliverable: material, properties, save, drawing, export",
                     () => DeliverableTests.ProducesTheWholeDeliverable(run, session));
 
+                RunTest(run, session, "Topology: counts reach the model",
+                    () => SelectionCheckpointTests.TopologyCountsReachTheModel(run, session));
+
+                RunTest(run, session, "Checkpoint: revert removes only this request's work",
+                    () => SelectionCheckpointTests.RevertRemovesOnlyThisRequestsWork(run, session));
+
+                RunTest(run, session, "Selection: the user's face survives into the run",
+                    () => SelectionCheckpointTests.SelectionSurvivesIntoTheRun(run, session));
+
                 RunTest(run, session, "Batch: folder index, dry run, approved apply",
                     () => BatchTests.IndexPreviewApply(run, session));
 

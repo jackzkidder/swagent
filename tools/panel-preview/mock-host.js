@@ -94,6 +94,11 @@
 
     'menu': [init, function () { document.getElementById('menuBtn').click(); }],
 
+    'settings': [init, function () {
+      document.getElementById('menuBtn').click();
+      document.querySelector('[data-act=settings]').click();
+    }],
+
     'done': [init, function () { type('Make a small model house with a door and two windows.'); }]
       .concat(houseSteps, [
         { type: 'agent', kind: 'text', message:

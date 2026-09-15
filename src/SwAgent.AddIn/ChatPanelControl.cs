@@ -15,6 +15,7 @@ using SolidWorks.Interop.swconst;
 using SwAgent.Agent;
 using SwAgent.Core.Batch;
 using SwAgent.Core.Infrastructure;
+using SwAgent.Core.Inspection;
 using SwAgent.Core.Session;
 using SwAgent.Core.Tools;
 using SwAgent.Core.Tools.Builtin;
@@ -44,7 +45,11 @@ namespace SwAgent.AddIn
         private readonly SwSession _session;
         private readonly ISwDispatcher _dispatcher;
         private readonly ApiKeyStore _keyStore;
+        private readonly SettingsStore _settingsStore;
         private readonly ToolRegistry _registry;
+
+        /// <summary>The user's saved choices. Applied when an agent is built.</summary>
+        private SwAgentSettings _settings;
 
         private readonly WebView2 _webView;
         private readonly Label _fallback;
@@ -81,6 +86,8 @@ namespace SwAgent.AddIn
             _session = session;
             _dispatcher = dispatcher;
             _keyStore = new ApiKeyStore(log: _log);
+            _settingsStore = new SettingsStore(log: _log);
+            _settings = _settingsStore.Load();
             _registry = BuiltinTools.CreateRegistry();
 
             if (_session != null)
@@ -254,6 +261,10 @@ namespace SwAgent.AddIn
                             OpenLogFolder();
                             break;
 
+                        case "saveSettings":
+                            SaveSettings(root);
+                            break;
+
                         case "batchApply":
                             if (root.TryGetProperty("id", out var applyId))
                                 RunDetached(ApplyBatchAsync(applyId.GetString()));
@@ -297,7 +308,8 @@ namespace SwAgent.AddIn
                 type = "init",
                 hasKey = masked != null,
                 maskedKey = masked,
-                model = ModelIds.Opus5,
+                model = _settings.Model,
+                maxTurns = _settings.MaxTurns,
                 version = typeof(ChatPanelControl).Assembly.GetName().Version.ToString(3),
                 theme = SolidWorksTheme(),
                 sessionCostUsd = SessionCost(),
@@ -412,11 +424,22 @@ namespace SwAgent.AddIn
                 }
 
                 if (_agent == null)
-                    _agent = new CadAgent(apiKey, _dispatcher, _session, _registry, _log);
+                {
+                    _agent = new CadAgent(apiKey, _dispatcher, _session, _registry, _log, _settings.Model)
+                    {
+                        MaxTurns = _settings.MaxTurns,
+                    };
+                }
 
                 CadAgent agent = _agent;
                 decimal costBefore = agent.Cost.EstimatedCostUsd;
                 _running = running;
+
+                // Both of these must happen BEFORE the loop starts. Every tool
+                // begins by clearing the selection, so the first tool call would
+                // destroy the thing "this face" refers to; and a checkpoint
+                // taken later would not cover the whole request.
+                await _dispatcher.InvokeAsync(() => PrepareSession()).ConfigureAwait(false);
 
                 // Progress arrives on worker threads; PostToPage marshals back
                 // onto the UI thread itself. Replies and failures go across
@@ -463,6 +486,87 @@ namespace SwAgent.AddIn
                 if (ReferenceEquals(_running, running)) _running = null;
                 try { running.Dispose(); } catch { }
             }
+        }
+
+        /// <summary>
+        /// Snapshot what the user selected, and mark the feature tree so this
+        /// request's work can be removed as a unit. Runs on the SOLIDWORKS
+        /// thread, and never throws: neither of these is worth failing a run.
+        /// </summary>
+        private void PrepareSession()
+        {
+            try
+            {
+                _session.UserSelection = SelectionReader.Capture(_session);
+            }
+            catch (Exception ex)
+            {
+                _log.Debug($"Could not capture the selection: {ex.Message}");
+                _session.UserSelection = null;
+            }
+
+            try
+            {
+                _session.Checkpoints.Mark(FeatureTree.Read(_session).Select(n => n.Name));
+            }
+            catch (Exception ex)
+            {
+                // No document open yet, most likely. A mark that does not
+                // describe the tree is worse than none.
+                _log.Debug($"Could not mark a checkpoint: {ex.Message}");
+                _session.Checkpoints.Clear();
+            }
+        }
+
+        /// <summary>
+        /// Save the user's settings and apply them.
+        ///
+        /// A model change ends the conversation: the cost meter is built from
+        /// the model, the prompt cache is keyed on the exact request prefix,
+        /// and carrying a half-finished part across a model swap would report
+        /// costs from one model against work done by another. The page says so
+        /// before the user presses Save.
+        /// </summary>
+        private void SaveSettings(JsonElement root)
+        {
+            if (_running != null || _batchRunning)
+            {
+                PostToPage(new { type = "settingsResult", ok = false, message = "Wait for SwAgent to finish first." });
+                return;
+            }
+
+            var wanted = new SwAgentSettings
+            {
+                Model = root.TryGetProperty("model", out var model) ? model.GetString() : _settings.Model,
+                MaxTurns = root.TryGetProperty("maxTurns", out var turns) && turns.TryGetInt32(out int t)
+                    ? t
+                    : _settings.MaxTurns,
+            };
+
+            bool modelChanged = !string.Equals(wanted.Model, _settings.Model, StringComparison.OrdinalIgnoreCase);
+
+            _settings = _settingsStore.Save(wanted);
+            if (modelChanged) DropAgent();
+
+            PostToPage(new
+            {
+                type = "settingsResult",
+                ok = true,
+                model = _settings.Model,
+                maxTurns = _settings.MaxTurns,
+                chatReset = modelChanged,
+                sessionCostUsd = SessionCost(),
+                message = modelChanged
+                    ? $"Saved. {DescribeModel(_settings.Model)} will be used, starting a new chat."
+                    : "Saved.",
+            });
+        }
+
+        private static string DescribeModel(string modelId)
+        {
+            if (string.Equals(modelId, ModelIds.Sonnet5, StringComparison.OrdinalIgnoreCase)) return "Sonnet 5";
+            if (string.Equals(modelId, ModelIds.Opus5, StringComparison.OrdinalIgnoreCase)) return "Opus 5";
+            return modelId;
         }
 
         private void StartNewChat()

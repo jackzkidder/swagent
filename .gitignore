@@ -1,5 +1,10 @@
 bin/
 obj/
+
+# SOLIDWORKS interop assemblies. Dassault's files, copied from a local install
+# and never redistributed by us - see refs/README.md.
+refs/*.dll
+
 *.user
 *.suo
 .vs/

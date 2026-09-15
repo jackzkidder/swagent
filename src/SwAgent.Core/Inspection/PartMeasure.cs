@@ -67,7 +67,7 @@ namespace SwAgent.Core.Inspection
 
             bool hasBody = volumeM3 > 0;
 
-            return new PartMeasurements(
+            var measurements = new PartMeasurements(
                 hasBody: hasBody,
                 massGrams: Units.MassFromApiGrams(massKg),
                 volumeCm3: Units.VolumeFromApiCm3(volumeM3),
@@ -84,6 +84,13 @@ namespace SwAgent.Core.Inspection
                     Units.LengthFromApi(box[0]), Units.LengthFromApi(box[1]), Units.LengthFromApi(box[2]),
                     Units.LengthFromApi(box[3]), Units.LengthFromApi(box[4]), Units.LengthFromApi(box[5])
                 });
+
+            // Counts, not sizes: the structural half of the round-trip, and the
+            // only thing that catches a shell that did not hollow or a pattern
+            // that placed nothing. See BodyTopology.
+            measurements.Topology = BodyTopology.Read(session);
+
+            return measurements;
         }
 
         /// <summary>
@@ -141,6 +148,12 @@ namespace SwAgent.Core.Inspection
         public double[] BoundingBoxMm { get; }
 
         /// <summary>
+        /// Body, face and edge counts. Set after construction because it comes
+        /// from the modeller rather than the mass property evaluator.
+        /// </summary>
+        public BodyCounts Topology { get; set; }
+
+        /// <summary>
         /// The three bounding box dimensions, largest first.
         ///
         /// Reference tests assert on these rather than on X/Y/Z, because which
@@ -187,6 +200,9 @@ namespace SwAgent.Core.Inspection
 
             sb.Append("Volume ").Append(VolumeCm3.ToString("0.###", c)).Append(" cm3. ");
             sb.Append("Mass ").Append(MassGrams.ToString("0.###", c)).Append(" g.");
+
+            string topology = Topology?.Describe();
+            if (topology != null) sb.Append(' ').Append(topology);
 
             return sb.ToString();
         }

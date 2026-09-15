@@ -274,6 +274,28 @@
   .example .t { display: block; }
   .fine { margin: 16px 2px 0; font-size: 11.5px; color: var(--faint); }
 
+  /* ---- settings ---- */
+  .opts { display: flex; flex-direction: column; gap: 8px; }
+  .opt {
+    display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left; cursor: pointer;
+    padding: 11px 13px; border: 1px solid var(--line); border-radius: 14px; background: var(--raised);
+    box-shadow: var(--shadow-1); transition: border-color .15s, box-shadow .2s;
+  }
+  .opt:hover { border-color: var(--line-strong); box-shadow: var(--shadow-2); }
+  .opt.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .opt-check {
+    width: 18px; height: 18px; margin-top: 1px; flex: 0 0 auto; border-radius: 50%;
+    border: 1.5px solid var(--line-strong); display: grid; place-items: center; color: var(--accent-fg);
+  }
+  .opt.selected .opt-check { background: var(--accent); border-color: var(--accent); }
+  .opt-check svg { width: 10px; height: 10px; opacity: 0; }
+  .opt.selected .opt-check svg { opacity: 1; }
+  .opt-name { display: block; font-weight: 600; }
+  .opt-note { display: block; margin-top: 1px; font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+  .settings-section { margin-top: 20px; }
+  .settings-key { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  .field.narrow { max-width: 130px; }
+
   /* ---- transcript ---- */
   .msg-user { display: flex; justify-content: flex-end; margin: 2px 0 14px; }
   .msg-user .bubble {
@@ -470,6 +492,10 @@
     <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
     <symbol id="i-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-2.9 3.8M6.6 6.6A17.4 17.4 0 0 0 2 12s3.6 7 10 7a9.8 9.8 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="m2 2 20 20"/></symbol>
     <symbol id="i-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3.2"/>
+      <path d="M12 2.8l1.5 2.4 2.8-.5.6 2.8 2.5 1.3-1.4 2.5 1.4 2.5-2.5 1.3-.6 2.8-2.8-.5L12 21.2l-1.5-2.4-2.8.5-.6-2.8-2.5-1.3L6 12.7 4.6 10.2l2.5-1.3.6-2.8 2.8.5z"/>
+    </symbol>
     <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.8-9.8"/><path d="m16 7 3 3"/><path d="m14 9 2 2"/></symbol>
     <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></symbol>
     <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/></symbol>
@@ -493,7 +519,7 @@
   </button>
   <div class="menu" id="menu" role="menu" hidden>
     <button role="menuitem" data-act="newChat"><svg aria-hidden="true"><use href="#i-new"/></svg>New chat</button>
-    <button role="menuitem" data-act="changeKey"><svg aria-hidden="true"><use href="#i-key"/></svg>Change API key</button>
+    <button role="menuitem" data-act="settings"><svg aria-hidden="true"><use href="#i-gear"/></svg>Settings</button>
     <button role="menuitem" data-act="billing"><svg aria-hidden="true"><use href="#i-external"/></svg>Anthropic usage and billing</button>
     <button role="menuitem" data-act="logs"><svg aria-hidden="true"><use href="#i-folder"/></svg>Open log folder</button>
     <div class="menu-sep"></div>
@@ -544,6 +570,59 @@
       <li>File lists from batch changes stay on this PC; the model sees row numbers.</li>
       <li>There is no SwAgent server and no analytics.</li>
     </ul>
+  </div>
+</main>
+
+<!-- ============ SETTINGS ============ -->
+<main id="settings" class="setup" hidden>
+  <p class="eyebrow">Settings</p>
+  <h2>How SwAgent runs</h2>
+
+  <label class="lbl">Model</label>
+  <div class="opts" id="modelOpts">
+    <button class="opt" data-model="claude-opus-5">
+      <span class="opt-check"><svg aria-hidden="true"><use href="#i-check"/></svg></span>
+      <span class="opt-body">
+        <span class="opt-name">Opus 5</span>
+        <span class="opt-note">The default. Best at reasoning about geometry it cannot directly see, which is most of this job. A part typically costs $0.10&ndash;$1.20 of your Anthropic credit.</span>
+      </span>
+    </button>
+    <button class="opt" data-model="claude-sonnet-5">
+      <span class="opt-check"><svg aria-hidden="true"><use href="#i-check"/></svg></span>
+      <span class="opt-body">
+        <span class="opt-name">Sonnet 5</span>
+        <span class="opt-note">Around 2.5&times; cheaper per token. Fine for simple prismatic parts and batch changes; more likely to need correcting on anything shaped.</span>
+      </span>
+    </button>
+  </div>
+  <p class="fine">Changing the model starts a new chat, because the running cost is measured per model.</p>
+
+  <div class="settings-section">
+    <label class="lbl" for="turns">Step limit</label>
+    <div class="field narrow">
+      <input type="number" id="turns" min="5" max="80" step="5" inputmode="numeric">
+    </div>
+    <p class="fine">The most tool calls SwAgent will make for one message. This is a spend limit: if it
+       misunderstands, it stops here instead of working through your credit. Default 40.</p>
+  </div>
+
+  <div class="settings-section">
+    <label class="lbl">Anthropic API key</label>
+    <div class="row">
+      <span class="settings-key" id="settingsKey">No key saved</span>
+      <button class="btn secondary small" id="changeKeyBtn"><svg aria-hidden="true"><use href="#i-key"/></svg>Change key</button>
+    </div>
+  </div>
+
+  <div class="row settings-section">
+    <button class="btn" id="saveSettings">Save</button>
+    <button class="btn secondary" id="cancelSettings">Cancel</button>
+  </div>
+  <div class="note" id="settingsNote" role="status" hidden></div>
+
+  <div class="settings-section">
+    <button class="btn secondary small" data-act-inline="logs"><svg aria-hidden="true"><use href="#i-folder"/></svg>Open log folder</button>
+    <p class="fine" id="settingsVersion"></p>
   </div>
 </main>
 
@@ -656,7 +735,7 @@
     unexpected:   { title: 'Something went wrong', actions: [['Try again', 'retry'], ['Open log folder', 'logs']] }
   };
 
-  var setup = $('setup'), chat = $('chat'), composerBar = $('composerBar');
+  var setup = $('setup'), settings = $('settings'), chat = $('chat'), composerBar = $('composerBar');
   var transcript = $('transcript'), empty = $('empty');
   var input = $('input'), sendBtn = $('send'), stopBtn = $('stop');
   var newChatBtn = $('newChat'), menuBtn = $('menuBtn'), menu = $('menu');
@@ -666,6 +745,7 @@
     busy: false,
     batchRunning: false,
     model: '',
+    maxTurns: 40,
     version: '',
     maskedKey: '',
     run: null,
@@ -887,16 +967,69 @@
 
   function show(which) {
     setup.hidden = which !== 'setup';
+    settings.hidden = which !== 'settings';
     chat.hidden = which !== 'chat';
     composerBar.hidden = which !== 'chat';
     newChatBtn.hidden = which !== 'chat';
     $('cancelSetup').hidden = !(which === 'setup' && state.hasKey);
     if (which === 'setup') {
       setTimeout(function () { $('keyInput').focus(); }, 0);
-    } else {
+    } else if (which === 'chat') {
       input.focus();
     }
   }
+
+  // ---------------------------------------------------------------- settings
+
+  function openSettings() {
+    if (state.busy || state.batchRunning) return;
+
+    Array.prototype.forEach.call(document.querySelectorAll('.opt'), function (b) {
+      b.classList.toggle('selected', b.getAttribute('data-model') === state.model);
+    });
+
+    $('turns').value = state.maxTurns;
+    $('settingsKey').textContent = state.maskedKey ? 'Key ' + state.maskedKey : 'No key saved';
+    $('settingsVersion').textContent = 'SwAgent' + (state.version ? ' ' + state.version : '') + ' · JK Labs';
+    setNote('settingsNote', '', '');
+    show('settings');
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.opt'), function (b) {
+    b.addEventListener('click', function () {
+      Array.prototype.forEach.call(document.querySelectorAll('.opt'), function (o) {
+        o.classList.toggle('selected', o === b);
+      });
+    });
+  });
+
+  $('saveSettings').addEventListener('click', function () {
+    var chosen = document.querySelector('.opt.selected');
+    var turns = parseInt($('turns').value, 10);
+
+    if (isNaN(turns) || turns < 5 || turns > 80) {
+      setNote('settingsNote', 'err', 'The step limit must be between 5 and 80.');
+      $('turns').focus();
+      return;
+    }
+
+    $('saveSettings').disabled = true;
+    setNote('settingsNote', 'busy', 'Saving...');
+    post({
+      type: 'saveSettings',
+      model: chosen ? chosen.getAttribute('data-model') : state.model,
+      maxTurns: turns
+    });
+  });
+
+  $('cancelSettings').addEventListener('click', function () { show('chat'); });
+  $('changeKeyBtn').addEventListener('click', openSetup);
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-act-inline]'), function (b) {
+    b.addEventListener('click', function () {
+      if (b.getAttribute('data-act-inline') === 'logs') post({ type: 'openLogs' });
+    });
+  });
 
   function refreshMeta() {
     var name = modelName(state.model);
@@ -914,7 +1047,7 @@
     sendBtn.disabled = locked || !input.value.trim();
     newChatBtn.disabled = locked;
     menu.querySelector('[data-act=newChat]').disabled = locked;
-    menu.querySelector('[data-act=changeKey]').disabled = locked;
+    menu.querySelector('[data-act=settings]').disabled = locked;
     $('hint').textContent = state.busy
       ? 'Working. Esc to stop.'
       : state.batchRunning
@@ -1261,7 +1394,7 @@
     closeMenu();
     var act = b.getAttribute('data-act');
     if (act === 'newChat') newChat();
-    else if (act === 'changeKey') openSetup();
+    else if (act === 'settings') openSettings();
     else if (act === 'billing') post({ type: 'openUrl', url: 'billing' });
     else if (act === 'logs') post({ type: 'openLogs' });
   });
@@ -1284,8 +1417,8 @@
 
   // ------------------------------------------------------------------ setup
 
-  function setKeyNote(kind, text, action) {
-    var n = $('keyNote');
+  function setNote(id, kind, text, action) {
+    var n = $(id);
     n.textContent = '';
     n.className = 'note ' + kind;
     n.hidden = !text;
@@ -1296,6 +1429,8 @@
     if (action) body.appendChild(action);
     n.appendChild(body);
   }
+
+  function setKeyNote(kind, text, action) { setNote('keyNote', kind, text, action); }
 
   function openSetup() {
     if (state.busy || state.batchRunning) return;
@@ -1478,6 +1613,7 @@
       case 'init':
         state.hasKey = !!m.hasKey;
         state.model = m.model || '';
+        if (m.maxTurns) state.maxTurns = m.maxTurns;
         state.version = m.version || '';
         state.maskedKey = m.maskedKey || '';
         if (m.theme) document.documentElement.setAttribute('data-theme', m.theme);
@@ -1523,6 +1659,21 @@
 
       case 'done':
         onDone(m);
+        break;
+
+      case 'settingsResult':
+        $('saveSettings').disabled = false;
+        if (!m.ok) {
+          setNote('settingsNote', 'err', m.message || 'Could not save.');
+          break;
+        }
+        state.model = m.model || state.model;
+        if (m.maxTurns) state.maxTurns = m.maxTurns;
+        if (m.sessionCostUsd != null) state.sessionCost = m.sessionCostUsd;
+        refreshMeta();
+        if (m.chatReset) resetTranscript();
+        setNote('settingsNote', 'ok', m.message || 'Saved.');
+        setTimeout(function () { show('chat'); }, 700);
         break;
 
       case 'chatReset':

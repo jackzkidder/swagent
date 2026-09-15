@@ -51,6 +51,22 @@ namespace SwAgent.Core.Session
         public Batch.BatchPlanStore Batches { get; } = new Batch.BatchPlanStore();
 
         /// <summary>
+        /// A mark in the feature tree taken when the user sends a message, so
+        /// the agent can remove its own work cleanly instead of trusting undo.
+        /// </summary>
+        public CheckpointStore Checkpoints { get; } = new CheckpointStore();
+
+        /// <summary>
+        /// What the user had selected when they sent their message.
+        ///
+        /// Set by the panel BEFORE the agent runs, because every tool starts by
+        /// clearing the selection - the first tool call of a run would otherwise
+        /// destroy the thing "this face" refers to. Never read the live
+        /// selection instead; by then it is ours, not theirs.
+        /// </summary>
+        public Inspection.SelectionSnapshot UserSelection { get; set; }
+
+        /// <summary>
         /// True while a sketch is open for editing.
         ///
         /// InsertSketch toggles: the same call that opens a sketch closes it.

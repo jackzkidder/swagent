@@ -192,8 +192,9 @@ Built and verified against a real seat:
 - [x] Headless harness + 2 reference parts + malformed-argument boundary tests
 - [x] `ISwAddIn` shell, COM registration, WebView2 task pane, `UiThreadDispatcher`
 - [x] Tool registry with typed, range-validated parameters and JSON schema
-- [x] 29 tools: modelling, shell, fillet, chamfer, patterns, inspection,
-      properties, materials, files, drawings, design-intent contract
+- [x] 34 tools: modelling, shell, fillet, chamfer, patterns, inspection,
+      properties, materials, files, drawings, design-intent contract,
+      the user's selection, revert-to-request-start
 - [x] Verification round-trip: rebuild state + measurements + tree + screenshot
 - [x] DPAPI key storage, Anthropic transport, agent loop, prompt caching
 - [x] Chat UI in the task pane, with first-run key setup
@@ -207,6 +208,15 @@ Built and verified against a real seat:
       read-only and locked files, and files changed since the preview, are
       skipped with a reason; files last saved by an older release are not
       upgraded without explicit consent
+- [x] The user's selection: captured before the run starts (every tool clears
+      it), described with areas, normals and positions, and re-selectable - so
+      "sketch on this face" uses the face they clicked rather than a ray
+- [x] Body, face and edge counts in every measurement: the structural check
+      that catches a shell that did not hollow and a pattern that placed
+      nothing, neither of which moves the volume much
+- [x] Checkpoints: the tree is marked when a message arrives, so one call
+      deletes everything built since - absorbed sketches included - instead of
+      relying on undo, which cannot report whether it did anything
 - [x] Task pane UX: steps grouped per request with readable names, formatted
       replies, failure cards that offer the fix (add credit, change key, retry),
       Stop that leaves the conversation usable, New chat, cost per request and
