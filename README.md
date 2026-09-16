@@ -257,6 +257,24 @@ Not built yet, in dependency order:
       thread, which is why property and material previews stop at 50 files;
       apply already dispatches one file at a time
 
+## Licence
+
+[PolyForm Noncommercial 1.0.0](LICENSE.md). In short:
+
+- **Free** for personal use, study, hobby projects and evaluation, and for
+  charities, schools, universities, public research bodies and government.
+- **A commercial licence is required** to use it in a business, whatever the
+  size. Email jack@kidder.net.
+
+The software comes as is, with no warranty. It drives a CAD application that
+holds your unsaved work: read [the rules this code is built
+around](#the-rules-this-code-is-built-around), and keep saving your files.
+
+SOLIDWORKS is a trademark of Dassault Systèmes. SwAgent is an independent
+add-in and is not affiliated with, endorsed by, or supported by them.
+
+---
+
 **Known deviation from the spec:** the interops in `refs/` are SOLIDWORKS 2025
 (33.5). The stated policy is to compile against the oldest supported version so
 that newer seats can load the add-in, which means obtaining 2022 interops before
