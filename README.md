@@ -13,8 +13,34 @@ the two must not drift apart.
 
 **Status: works end to end.** Install it, paste an Anthropic key into the task
 pane, describe a part, and get the modelled part, a drawing, a STEP and a PDF.
-Verified against a real SOLIDWORKS 2025 seat, and packaged as an MSI. See
-[Where this actually is](#where-this-actually-is).
+Verified against a real SOLIDWORKS 2025 seat: 231 assertions against a live
+session. See [Where this actually is](#where-this-actually-is).
+
+---
+
+## Download
+
+### → [**Get the installer**](https://github.com/jackzkidder/swagent/releases/latest) ←
+
+Take `SwAgent-<version>-x64.msi` from **Assets** on that page. The installer is
+not in this repository; releases are.
+
+1. **Close SOLIDWORKS**, then run the `.msi`.
+2. Windows warns that the publisher is unknown - this build is not code signed.
+   **More info → Run anyway**, or build from source below.
+3. Open SOLIDWORKS and click the **SwAgent** tab in the Task Pane.
+4. Paste an Anthropic API key. The panel links to the pages for creating one and
+   adding credit.
+
+**New to this? Read [docs/INSTALL.md](docs/INSTALL.md)** - ten minutes, written
+for someone who has never had an API key: requirements, key setup, what it
+costs, your first part, settings, and what to do when something goes wrong.
+
+You need **SOLIDWORKS 2025** on 64-bit Windows. A simple part typically costs
+$0.10-$0.50 of Anthropic credit; a detailed one with a drawing and exports is
+around $1.
+
+Everything below this line is for building from source.
 
 ---
 
