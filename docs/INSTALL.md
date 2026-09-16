@@ -148,6 +148,29 @@ installer did not complete - reinstall with SOLIDWORKS closed.
 The WebView2 runtime is missing or blocked. Install
 *Microsoft Edge WebView2 Runtime* from Microsoft, then restart SOLIDWORKS.
 
+**"Could not reach api.anthropic.com", or a message about a secure connection.**
+SwAgent says which of these it is, and they need different fixes:
+
+- *"Windows would not open a secure connection"* - a TLS problem on that PC, not
+  a network one. SwAgent asks Windows for TLS 1.2 explicitly, so if this still
+  appears, something on the machine is refusing it: an old Windows build, a
+  group policy, or software inspecting HTTPS traffic.
+- *"A proxy on this network is refusing the connection"* - a corporate proxy
+  wants credentials. SwAgent offers your Windows sign-in to it automatically; if
+  that is not enough, your IT team needs to allow `api.anthropic.com`.
+- *"could not look up api.anthropic.com"* - DNS. If a browser on that machine
+  cannot open anthropic.com either, the problem is the network, not SwAgent.
+- *"Something between this PC and api.anthropic.com refused the connection"* - a
+  firewall, VPN or filter. University and company networks often block it.
+
+**The one-minute test:** open `https://api.anthropic.com` in a browser on that
+machine. If the browser reaches it but SwAgent cannot, it is TLS or the proxy.
+If the browser cannot either, try a phone hotspot - that separates a network
+block from a machine problem faster than anything else.
+
+Either way, **⋮ → Open log folder** now records the full reason, with API keys
+scrubbed. That is the thing to send if you report it.
+
 **"Your Anthropic account is out of credit."**
 Add credit at `console.anthropic.com` under Billing, then press **Try again** in
 the panel. Nothing is lost.

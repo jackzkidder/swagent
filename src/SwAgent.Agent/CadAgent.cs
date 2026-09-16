@@ -106,7 +106,11 @@ namespace SwAgent.Agent
             // ANTHROPIC_API_KEY or an OAuth profile on the machine and bill
             // somebody else's credential instead of prompting for setup. The
             // guard at the top of this constructor is what prevents that.
-            _client = new AnthropicClient { ApiKey = apiKey };
+            _client = new AnthropicClient
+            {
+                ApiKey = apiKey,
+                HttpClient = AnthropicTransport.Client,
+            };
             Cost = new CostMeter(ModelPricing.For(Model));
         }
 
@@ -534,13 +538,19 @@ namespace SwAgent.Agent
                 {
                     if (attempt == maxAttempts)
                     {
-                        _log.Error($"Network failure: {ex.Message}");
+                        // Same reasoning as KeyValidator: name the actual cause.
+                        // "Check the network connection" is wrong advice when
+                        // the machine refused TLS, and unhelpful when a firewall
+                        // is doing it on purpose.
+                        var diagnosis = TransportDiagnosis.Diagnose(ex);
+                        _log.Error($"Network failure ({diagnosis.Code}): {diagnosis.Detail}");
+
                         progress?.Report(new AgentEvent
                         {
                             Type = AgentEvent.Kind.Failed,
                             Code = "network",
                             Ok = false,
-                            Message = "Could not reach api.anthropic.com. Check the network connection.",
+                            Message = diagnosis.Message,
                         });
                         return null;
                     }

@@ -149,8 +149,24 @@ namespace SwAgent.Harness
         }
 
         /// <summary>
-        /// Grep our own source for http(s) URLs that are not Anthropic and not
-        /// documentation links.
+        /// Find real outbound URLs in our own source: a scheme, a host, and a
+        /// host nobody authorised.
+        ///
+        /// This used to flag any non-comment line containing the letters
+        /// "http" - which is how HttpClient, HttpClientHandler, and the words
+        /// "HTTPS traffic" inside a user-facing error message became ten
+        /// security findings, none of them a host.
+        ///
+        /// The repo learned this once already, in the code-execution check:
+        /// keyword matching against a domain vocabulary produces false
+        /// positives, and a security check that cries wolf gets switched off.
+        /// So this matches URLs and compares HOSTS, exactly. It is stricter
+        /// than what it replaces, not looser: a telemetry endpoint is still
+        /// caught, and plain http to a non-namespace host is now caught too.
+        ///
+        /// Comments are scanned as well. A URL in a comment is not traffic, but
+        /// it is how a "temporary" endpoint gets parked before someone uses it,
+        /// and the allowlist makes the honest ones cheap to declare.
         /// </summary>
         private static List<string> ScanSourceForOutboundHosts()
         {
@@ -159,30 +175,52 @@ namespace SwAgent.Harness
             string repoRoot = FindRepoRoot();
             if (repoRoot == null) return offenders;
 
-            string[] allowedHosts =
+            var allowedHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "api.anthropic.com",
-                "console.anthropic.com",   // referenced in user-facing text only
-                "schemas.microsoft.com",   // XML namespaces in project files
-                "www.w3.org",
+                "api.anthropic.com",       // the only host we ever send anything to
+                "console.anthropic.com",   // user-facing text, and the panel's open-page allowlist
+                "polyformproject.org",     // the licence
+                "github.com",              // repository links in user-facing text
+                "schemas.microsoft.com",   // XML namespaces
+                "wixtoolset.org",          // installer schema namespace
+                "www.w3.org",              // SVG and XML namespaces
             };
 
-            foreach (string file in Directory.GetFiles(Path.Combine(repoRoot, "src"), "*.cs", SearchOption.AllDirectories))
+            // Hosts that legitimately appear as plain http, because a namespace
+            // URI is an identifier and is never fetched.
+            var namespaceHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "schemas.microsoft.com", "wixtoolset.org", "www.w3.org",
+            };
+
+            var url = new System.Text.RegularExpressions.Regex(
+                @"(?<scheme>https?)://(?<host>[A-Za-z0-9._\-]+)",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            string src = Path.Combine(repoRoot, "src");
+            var files = Directory.GetFiles(src, "*.cs", SearchOption.AllDirectories)
+                .Concat(Directory.GetFiles(src, "*.html", SearchOption.AllDirectories));
+
+            foreach (string file in files)
             {
                 string[] lines = File.ReadAllLines(file);
                 for (int i = 0; i < lines.Length; i++)
                 {
-                    string line = lines[i];
-                    int idx = line.IndexOf("http", StringComparison.OrdinalIgnoreCase);
-                    if (idx < 0) continue;
+                    foreach (System.Text.RegularExpressions.Match m in url.Matches(lines[i]))
+                    {
+                        string host = m.Groups["host"].Value;
+                        string scheme = m.Groups["scheme"].Value;
 
-                    // Ignore comment lines - documentation references are fine.
-                    string trimmed = line.TrimStart();
-                    if (trimmed.StartsWith("//") || trimmed.StartsWith("///") || trimmed.StartsWith("*")) continue;
-
-                    if (allowedHosts.Any(h => line.IndexOf(h, StringComparison.OrdinalIgnoreCase) >= 0)) continue;
-
-                    offenders.Add($"{Path.GetFileName(file)}:{i + 1}: {trimmed}");
+                        if (!allowedHosts.Contains(host))
+                        {
+                            offenders.Add($"{Path.GetFileName(file)}:{i + 1}: unexpected host {host}");
+                        }
+                        else if (scheme.Equals("http", StringComparison.OrdinalIgnoreCase)
+                                 && !namespaceHosts.Contains(host))
+                        {
+                            offenders.Add($"{Path.GetFileName(file)}:{i + 1}: plain http to {host}");
+                        }
+                    }
                 }
             }
 

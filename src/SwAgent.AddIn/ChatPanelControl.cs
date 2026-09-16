@@ -374,6 +374,13 @@ namespace SwAgent.AddIn
                 }
                 else
                 {
+                    // Log why. Until now a rejected key logged nothing at all,
+                    // so the log folder - the thing the panel tells people to
+                    // send us - was silent about the one failure they hit most.
+                    _log.Error(validation.Detail == null
+                        ? $"Key rejected ({validation.Result}): {validation.Message}"
+                        : $"Key check failed ({validation.Result}): {validation.Detail}");
+
                     PostToPage(new { type = "keyResult", ok = false, code = Describe(validation.Result), message = validation.Message });
                 }
             }

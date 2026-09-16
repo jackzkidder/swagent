@@ -8,7 +8,7 @@
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Company>JK Labs</Company>
     <Product>SwAgent</Product>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <RepoRefs>$(MSBuildThisFileDirectory)refs\</RepoRefs>
 
     <!-- Keep the output path independent of how the build was invoked.

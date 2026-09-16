@@ -15,7 +15,9 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Version = '0.1.0',
+    # Keep in step with <Version> in Directory.Build.props: that one stamps the
+    # assembly the panel reports, this one names the MSI and drives the upgrade.
+    [string]$Version = '0.1.1',
     [switch]$SkipBuild
 )
 

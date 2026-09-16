@@ -30,6 +30,14 @@ namespace SwAgent.Agent
     {
         public KeyValidationResult Result { get; set; }
         public string Message { get; set; }
+
+        /// <summary>
+        /// The full exception chain when the failure was a transport one, for
+        /// the log. Never shown in the panel: the user gets Message, support
+        /// gets this.
+        /// </summary>
+        public string Detail { get; set; }
+
         public bool IsValid => Result == KeyValidationResult.Valid;
     }
 
@@ -60,7 +68,14 @@ namespace SwAgent.Agent
                 };
             }
 
-            var client = new AnthropicClient { ApiKey = apiKey.Trim() };
+            // The shared transport, not a default client: TLS and proxy
+            // credentials are set there, and the first thing a new user does is
+            // this call - so it must not be the one request that skips them.
+            var client = new AnthropicClient
+            {
+                ApiKey = apiKey.Trim(),
+                HttpClient = AnthropicTransport.Client,
+            };
 
             try
             {
@@ -117,14 +132,17 @@ namespace SwAgent.Agent
             }
             catch (Exception ex)
             {
-                // Everything left is a transport problem: no DNS, no route, a
-                // proxy in the way. Common on a corporate network, and nothing
-                // to do with the key.
+                // Everything left is a transport problem - but WHICH one matters
+                // enormously. This used to print the exception's type name and
+                // tell everyone to check their network, which sent a user to
+                // their IT department over what was a setting on their own PC.
+                var diagnosis = TransportDiagnosis.Diagnose(ex);
+
                 return new KeyValidation
                 {
                     Result = KeyValidationResult.NoNetwork,
-                    Message = "Could not reach api.anthropic.com. Check the network connection, or a " +
-                              $"proxy or firewall that might be blocking it. ({ex.GetType().Name})",
+                    Message = diagnosis.Message,
+                    Detail = diagnosis.Detail,
                 };
             }
         }

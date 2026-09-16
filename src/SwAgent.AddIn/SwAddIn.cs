@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
@@ -71,6 +72,8 @@ namespace SwAgent.AddIn
                 // SLDWORKS.exe.config - so our dependencies resolve by simple
                 // name from our own directory instead of by binding redirect.
                 AssemblyRedirector.Install(_log);
+
+                EnableModernTls();
 
                 var missing = AssemblyRedirector.VerifyDependencies(
                     "SwAgent.Core", "SwAgent.Agent", "Anthropic", "System.Text.Json");
@@ -233,6 +236,54 @@ namespace SwAgent.AddIn
         /// to SOLIDWORKS and simply yields a default icon, which is far better
         /// than failing to load over a missing bitmap.
         /// </summary>
+        /// <summary>
+        /// Make sure TLS 1.2 is available before anything talks to Anthropic.
+        ///
+        /// This is the classic .NET Framework deployment trap, and it fails in
+        /// the most misleading way possible: on the developer's machine it
+        /// works, and on someone else's it reports a network error, because
+        /// SecurityProtocol defaults come from the HOST PROCESS and the
+        /// machine's registry. We are loaded inside SLDWORKS.exe and the CLR
+        /// reads SLDWORKS.exe.config, so the usual fix - a runtime setting in
+        /// our own app.config - is not available to us. It has to be code, and
+        /// it has to run before the first HTTPS request.
+        ///
+        /// api.anthropic.com requires TLS 1.2 or better. SSL 3.0 and TLS 1.0
+        /// are deliberately not added back: enabling a broken protocol to fix a
+        /// connection is not a trade worth making.
+        ///
+        /// ServicePointManager is process-wide, which is why this is set once
+        /// here rather than per client: on .NET Framework, HttpClient is built
+        /// on HttpWebRequest and honours it.
+        /// </summary>
+        private void EnableModernTls()
+        {
+            try
+            {
+                var wanted = SecurityProtocolType.Tls12;
+
+                // TLS 1.3 exists in the enum on 4.8 but throws on Windows
+                // versions whose SCHANNEL cannot do it, so it is attempted
+                // separately and never at the cost of 1.2.
+                try
+                {
+                    ServicePointManager.SecurityProtocol |= wanted | (SecurityProtocolType)12288;
+                }
+                catch (NotSupportedException)
+                {
+                    ServicePointManager.SecurityProtocol |= wanted;
+                }
+
+                _log.Info($"TLS protocols enabled: {ServicePointManager.SecurityProtocol}.");
+            }
+            catch (Exception ex)
+            {
+                // Never fatal. If this fails the add-in still loads, and the
+                // connection error that follows now says what to do about it.
+                _log.Error($"Could not raise the TLS protocol level: {ex.Message}");
+            }
+        }
+
         /// <summary>
         /// The high-DPI icon set, largest last, or an empty array if the files
         /// are not beside the assembly. Only paths that exist are returned:
