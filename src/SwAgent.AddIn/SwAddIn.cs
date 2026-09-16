@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -169,12 +170,33 @@ namespace SwAgent.AddIn
         {
             try
             {
-                string icon = ResolveIconPath();
-                _taskPaneView = _sw.CreateTaskpaneView2(icon, DisplayTitle);
+                // Prefer the image list: SOLIDWORKS then picks the size that
+                // matches the user's display scaling, instead of stretching one
+                // 16px bitmap into a blur on a 4K screen. Fall back to the
+                // single bitmap if the call is refused - a tab with a dated
+                // icon beats an add-in that does not load.
+                string[] iconSet = ResolveIconSet();
+                if (iconSet.Length > 0)
+                {
+                    try
+                    {
+                        _taskPaneView = _sw.CreateTaskpaneView3(iconSet, DisplayTitle);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.Debug($"CreateTaskpaneView3 refused the image list: {ex.Message}");
+                    }
+                }
 
                 if (_taskPaneView == null)
                 {
-                    _log.Error("CreateTaskpaneView2 returned null.");
+                    string icon = ResolveIconPath();
+                    _taskPaneView = _sw.CreateTaskpaneView2(icon, DisplayTitle);
+                }
+
+                if (_taskPaneView == null)
+                {
+                    _log.Error("Neither CreateTaskpaneView3 nor CreateTaskpaneView2 returned a view.");
                     return false;
                 }
 
@@ -211,6 +233,36 @@ namespace SwAgent.AddIn
         /// to SOLIDWORKS and simply yields a default icon, which is far better
         /// than failing to load over a missing bitmap.
         /// </summary>
+        /// <summary>
+        /// The high-DPI icon set, largest last, or an empty array if the files
+        /// are not beside the assembly. Only paths that exist are returned:
+        /// SOLIDWORKS rejects the whole list if one entry is missing.
+        /// </summary>
+        private string[] ResolveIconSet()
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                if (string.IsNullOrEmpty(dir)) return Array.Empty<string>();
+
+                var sizes = new[] { 20, 32, 40, 64, 96, 128 };
+                var found = new List<string>(sizes.Length);
+
+                foreach (int size in sizes)
+                {
+                    string candidate = Path.Combine(dir, "Assets", $"taskpane-{size}.png");
+                    if (File.Exists(candidate)) found.Add(candidate);
+                }
+
+                return found.Count == sizes.Length ? found.ToArray() : Array.Empty<string>();
+            }
+            catch (Exception ex)
+            {
+                _log.Debug($"Could not resolve the icon set: {ex.Message}");
+                return Array.Empty<string>();
+            }
+        }
+
         private string ResolveIconPath()
         {
             try

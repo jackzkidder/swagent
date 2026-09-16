@@ -86,6 +86,11 @@
     <None Include="Assets\taskpane.bmp">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- The high-DPI set for CreateTaskpaneView3. Wildcarded so regenerating
+         the icon at more sizes does not need a csproj edit as well. -->
+    <None Include="Assets\taskpane-*.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>
